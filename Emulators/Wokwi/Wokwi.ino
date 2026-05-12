@@ -168,6 +168,11 @@ void drawDisplay() {
     snprintf(turbo, sizeof(turbo), "** PSSSSH! #%lu **", turboCount);
     display.drawStr(0, 12, turbo);
     display.setFont(u8g2_font_5x7_tr);
+  } else if (currentView == 3) {
+    display.setFont(u8g2_font_5x7_tr);
+    char gbuf[10];
+    snprintf(gbuf, sizeof(gbuf), "Gear: %d", gear);
+    display.drawStr(0, 8, gbuf);
   } else {
     display.setFont(u8g2_font_5x7_tr);
     char hdr[24];
@@ -213,16 +218,10 @@ void drawDisplay() {
     display.drawStr(0, 40, line);
     snprintf(line, sizeof(line), "Gear: %d", gear);
     display.drawStr(0, 50, line);
-    snprintf(line, sizeof(line), "Turbo:  %lu", turboCount);
-    display.drawStr(0, 60, line);
 
   } else {
-    // Dual bar — throttle + speed, gear in corner
+    // Dual bar — throttle + speed, gear shown in header
     display.setFont(u8g2_font_5x7_tr);
-
-    char gbuf[6];
-    snprintf(gbuf, sizeof(gbuf), "G:%d", gear);
-    display.drawStr(0, 8, gbuf);
 
     // TPS bar
     display.drawStr(0, 22, "Throttle");
