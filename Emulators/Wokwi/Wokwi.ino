@@ -36,7 +36,9 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C display(U8G2_R0, U8X8_PIN_NONE);
 Bounce encBtn;
 
 // ── State ─────────────────────────────────────────────────────────────────
-int      currentView  = 0;    // 0=throttle, 1=speed, 2=all metrics
+#define STEPS_PER_ZONE 1          // encoder detents per zone; 4 zones = 1 full turn
+int      currentView  = 0;
+int      encoderPos   = 0;        // 0..(4*STEPS_PER_ZONE - 1)
 int      lastClk      = HIGH;
 
 float    metricTPS    = 0;
@@ -47,6 +49,7 @@ uint32_t lastTurboMs    = 0;
 uint32_t turboCount     = 0;
 uint32_t turboUntilMs   = 0;    // show "PSSSSH!" on OLED until this time
 uint32_t turboSoundUntilMs = 0; // filled circle indicator while sound plays
+uint32_t lastDrawMs        = 0;
 
 // ── Gear estimation ───────────────────────────────────────────────────────
 // RPM / speed ratio thresholds tuned for a typical small European petrol car.
@@ -143,11 +146,10 @@ void readEncoder() {
   }
   int clk = digitalRead(PIN_ENC_CLK);
   if (clk != lastClk && clk == LOW) {
-    if (digitalRead(PIN_ENC_DT) != clk) {
-      currentView = (currentView + 1) % 3;
-    } else {
-      currentView = (currentView + 2) % 3;
-    }
+    int delta = (digitalRead(PIN_ENC_DT) != clk) ? -1 : 1;
+    int total = 4 * STEPS_PER_ZONE;
+    encoderPos  = ((encoderPos + delta) % total + total) % total;
+    currentView = encoderPos / STEPS_PER_ZONE;
   }
   lastClk = clk;
 }
@@ -169,7 +171,7 @@ void drawDisplay() {
   } else {
     display.setFont(u8g2_font_5x7_tr);
     char hdr[24];
-    snprintf(hdr, sizeof(hdr), "Turbo:%lu  [%d]", turboCount, currentView + 1);
+    snprintf(hdr, sizeof(hdr), "Turbo:%lu", turboCount);
     display.drawStr(0, 8, hdr);
   }
 
@@ -199,7 +201,7 @@ void drawDisplay() {
     snprintf(grpbuf, sizeof(grpbuf), "Gear: %d", gear);
     display.drawStr(80, 20, grpbuf);
 
-  } else {
+  } else if (currentView == 2) {
     // All metrics summary
     display.setFont(u8g2_font_5x7_tr);
     char line[32];
@@ -213,13 +215,38 @@ void drawDisplay() {
     display.drawStr(0, 50, line);
     snprintf(line, sizeof(line), "Turbo:  %lu", turboCount);
     display.drawStr(0, 60, line);
+
+  } else {
+    // Dual bar — throttle + speed, gear in corner
+    display.setFont(u8g2_font_5x7_tr);
+
+    char gbuf[6];
+    snprintf(gbuf, sizeof(gbuf), "G:%d", gear);
+    display.drawStr(0, 8, gbuf);
+
+    // TPS bar
+    display.drawStr(0, 22, "Throttle");
+    char tpsbuf[8];
+    snprintf(tpsbuf, sizeof(tpsbuf), "%3.0f%%", metricTPS);
+    display.drawStr(90, 22, tpsbuf);
+    int tpsW = (int)metricTPS;
+    display.drawFrame(0, 24, 102, 10);
+    if (tpsW > 0) display.drawBox(1, 25, tpsW, 8);
+
+    // Speed bar (0–200 km/h scale)
+    display.drawStr(0, 44, "Speed");
+    char spdbuf[10];
+    snprintf(spdbuf, sizeof(spdbuf), "%3.0f", metricSpeed);
+    display.drawStr(90, 44, spdbuf);
+    int spdW = min(100, (int)(metricSpeed / 2.0f));
+    display.drawFrame(0, 46, 102, 10);
+    if (spdW > 0) display.drawBox(1, 47, spdW, 8);
   }
 
-  // Playing indicator: filled circle top-right while sound is active
-  if (millis() < turboSoundUntilMs) {
-    display.drawDisc(124, 4, 3);
-  } else {
-    display.drawCircle(124, 4, 3);
+  // View indicator: 4 circles on right edge, filled = current view
+  for (int i = 0; i < 4; i++) {
+    if (i == currentView) display.drawDisc(124, 6 + i * 12, 3);
+    else                  display.drawCircle(124, 6 + i * 12, 3);
   }
 
   display.sendBuffer();
@@ -257,15 +284,17 @@ void setup() {
 void loop() {
   uint32_t now = millis();
 
-  readEncoder();
-  advanceScenario();
-  checkTurbo(now);
-  if (now < turboSoundUntilMs) {
-    digitalWrite(PIN_LED, (now / 100) % 2 == 0 ? HIGH : LOW); // blink ~5 Hz
-  } else {
-    digitalWrite(PIN_LED, LOW);
-  }
-  drawDisplay();
+  readEncoder();  // polled every iteration — no delay, so no pulses are missed
 
-  delay(50);  // ~20 Hz
+  if (now - lastDrawMs >= 50) {
+    advanceScenario();
+    checkTurbo(now);
+    if (now < turboSoundUntilMs) {
+      digitalWrite(PIN_LED, (now / 100) % 2 == 0 ? HIGH : LOW); // blink ~5 Hz
+    } else {
+      digitalWrite(PIN_LED, LOW);
+    }
+    drawDisplay();
+    lastDrawMs = now;
+  }
 }
