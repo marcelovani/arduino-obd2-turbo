@@ -48,24 +48,24 @@
     }
   ],
   "connections": [
-    ["oled:VCC", "esp:3V3",   "red",    []],
-    ["oled:GND", "esp:GND.1", "black",  []],
-    ["oled:SDA", "esp:D21",   "blue",   []],
-    ["oled:SCL", "esp:D22",   "green",  []],
+    ["oled:VCC", "esp:3V3", "red", []],
+    ["oled:GND", "esp:GND", "black", []],
+    ["oled:SDA", "esp:D21", "blue", []],
+    ["oled:SCL", "esp:D22", "green", []],
 
-    ["mpu:VCC",  "esp:3V3",   "red",    []],
-    ["mpu:GND",  "esp:GND.1", "black",  []],
-    ["mpu:SDA",  "esp:D21",   "blue",   []],
-    ["mpu:SCL",  "esp:D22",   "green",  []],
+    ["mpu:VCC", "esp:3V3", "red", []],
+    ["mpu:GND", "esp:GND", "black", []],
+    ["mpu:SDA", "esp:D21", "blue", []],
+    ["mpu:SCL", "esp:D22", "green", []],
 
-    ["enc:+",    "esp:3V3",   "red",    []],
-    ["enc:GND",  "esp:GND.2", "black",  []],
-    ["enc:CLK",  "esp:D25",   "orange", []],
-    ["enc:DT",   "esp:D26",   "purple", []],
-    ["enc:SW",   "esp:D27",   "yellow", []],
+    ["enc:+", "esp:3V3", "red", []],
+    ["enc:GND", "esp:GND", "black", []],
+    ["enc:CLK", "esp:D25", "orange", []],
+    ["enc:DT", "esp:D26", "purple", []],
+    ["enc:SW", "esp:D27", "yellow", []],
 
-    ["esp:D17",  "r1:1",      "cyan",   []],
-    ["r1:2",     "buz:1",     "cyan",   []],
-    ["buz:2",    "esp:GND.2", "black",  []]
+    ["esp:D17", "r1:1", "cyan", []],
+    ["r1:2", "buz:1", "cyan", []],
+    ["buz:2", "esp:GND", "black", []]
   ]
 }
