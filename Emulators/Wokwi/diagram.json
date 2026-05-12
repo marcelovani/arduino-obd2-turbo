@@ -6,65 +6,65 @@
     {
       "type": "wokwi-esp32-devkit-v1",
       "id": "esp",
-      "top": 64,
-      "left": 192,
+      "top": 52.7,
+      "left": 91,
       "attrs": {}
     },
     {
       "type": "board-ssd1306",
       "id": "oled",
-      "top": 80,
-      "left": 0,
+      "top": -35.26,
+      "left": 355.43,
       "attrs": { "i2cAddress": "0x3c" }
     },
     {
       "type": "wokwi-mpu6050",
       "id": "mpu",
-      "top": 256,
-      "left": 0,
+      "top": 397.42,
+      "left": 165.52,
       "attrs": {}
     },
     {
       "type": "wokwi-ky-040",
       "id": "enc",
-      "top": 160,
-      "left": 368,
+      "top": 136.1,
+      "left": -173.6,
       "attrs": {}
     },
     {
       "type": "wokwi-resistor",
       "id": "r1",
-      "top": 184,
-      "left": 40,
+      "top": 148.25,
+      "left": 315.4,
+      "rotate": 180,
       "attrs": { "value": "1000" }
     },
     {
       "type": "wokwi-buzzer",
       "id": "buz",
-      "top": 176,
-      "left": 0,
+      "top": 60,
+      "left": 472.2,
       "attrs": { "volume": "0.5" }
     }
   ],
   "connections": [
-    ["oled:VCC", "esp:3V3",   "red",    []],
-    ["oled:GND", "esp:GND.1", "black",  []],
-    ["oled:SDA", "esp:D21",   "blue",   []],
-    ["oled:SCL", "esp:D22",   "green",  []],
-
-    ["mpu:VCC",  "esp:3V3",   "red",    []],
-    ["mpu:GND",  "esp:GND.1", "black",  []],
-    ["mpu:SDA",  "esp:D21",   "blue",   []],
-    ["mpu:SCL",  "esp:D22",   "green",  []],
-
-    ["enc:+",    "esp:3V3",   "red",    []],
-    ["enc:GND",  "esp:GND.2", "black",  []],
-    ["enc:CLK",  "esp:D25",   "orange", []],
-    ["enc:DT",   "esp:D26",   "purple", []],
-    ["enc:SW",   "esp:D27",   "yellow", []],
-
-    ["esp:TX2",  "r1:2",      "cyan",   []],
-    ["r1:1",     "buz:1",     "cyan",   []],
-    ["buz:2",    "esp:GND.1", "black",  []]
-  ]
+    ["oled:VCC", "esp:3V3", "red", ["v-28.8", "h-163.05", "v268.8"]],
+    ["oled:GND", "esp:GND.1", "black", ["v-19.2", "h-96", "v249.7"]],
+    ["oled:SDA", "esp:D21", "blue", ["v-48", "h-211.13", "v192.4"]],
+    ["oled:SCL", "esp:D22", "green", ["v-38.4", "h-191.7", "v153.9"]],
+    ["mpu:VCC", "esp:3V3", "red", ["h0.08", "v-192", "h-47.7"]],
+    ["mpu:GND", "esp:GND.1", "black", ["h0.08", "v-201.5"]],
+    ["mpu:SDA", "esp:D21", "blue", ["h0.08", "v-287.6"]],
+    ["mpu:SCL", "esp:D22", "green", ["h0.08", "v-316.5"]],
+    ["enc:+", "esp:3V3", "red", []],
+    ["enc:GND", "esp:GND.2", "black", ["v20.1"]],
+    ["enc:CLK", "esp:D25", "orange", []],
+    ["enc:DT", "esp:D26", "purple", []],
+    ["enc:SW", "esp:D27", "yellow", []],
+    ["esp:TX2", "r1:2", "cyan", []],
+    ["r1:1", "buz:2", "red", ["h134.4", "v-9.6"]],
+    ["buz:1", "esp:GND.1", "black", ["v57.6", "h-316.9"]],
+    ["enc:VCC", "esp:3V3", "red", ["h201.6", "v38.8"]]
+  ],
+  "dependencies": {}
 }
