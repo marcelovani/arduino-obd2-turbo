@@ -44,6 +44,8 @@
 #define TURBO_RPM_MIN        1500.0f
 #define TURBO_MAX_GEAR       2
 #define TURBO_COOLDOWN_MS    2000
+#define TURBO_VOLUME_GEAR1   30    // 100% — DFPlayer max is 30
+#define TURBO_VOLUME_GEAR2   21    // 70%
 
 // ── Engine state threshold ────────────────────────────────────────────────
 #define ENGINE_IDLE_RPM  200.0f   // below this = engine off → parked screen
@@ -123,6 +125,7 @@ void checkTurbo(uint32_t now) {
 #ifdef SIMULATION
     turboSoundUntilMs = now + 1000;
 #else
+    dfplayer.volume(gear == 1 ? TURBO_VOLUME_GEAR1 : TURBO_VOLUME_GEAR2);
     dfplayer.play(1);
 #endif
     Serial.printf("[Turbo] #%lu  gear=%d  TPS %.0f→%.0f  RPM %.0f\n",
