@@ -1,9 +1,8 @@
 """
-Python mirror of the C++ OBD logic in the Arduino sketches.
+Python mirror of the C++ OBD logic in the Arduino sketch.
 
 These functions are kept in sync with the constants and algorithms in:
-  sketches/phase3_turbo/phase3_turbo.ino
-  sketches/phase4_dashboard/phase4_dashboard.ino
+  sketches/turbo/turbo.ino
 
 They are used by:
   - Unit tests (tests/unit/)

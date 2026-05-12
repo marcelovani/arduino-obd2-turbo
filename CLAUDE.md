@@ -2,7 +2,7 @@
 
 At the start of every session, read these two files before doing anything else:
 
-- [README.md](README.md) — project overview, hardware list, and build phases
+- [README.md](README.md) — project overview, hardware list, and Wokwi simulation setup
 - [esp32_obd2_dashboard_plan.md](esp32_obd2_dashboard_plan.md) — full technical plan: wiring, Turbo trigger algorithm, OBD2 protocol, state machine, code skeleton, all decisions made, and references
 
 ## Project summary

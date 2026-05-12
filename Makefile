@@ -44,8 +44,8 @@ EMULATOR_PID   := /tmp/elm327_emulator.pid
 
 # Wokwi / Arduino CLI settings
 ARDUINO_CLI    := arduino-cli
-WOKWI_SKETCH   := Emulators/Wokwi
-WOKWI_BUILD    := $(WOKWI_SKETCH)/build
+SKETCH         := sketches/turbo
+WOKWI_BUILD    := Emulators/Wokwi/build
 FQBN           := esp32:esp32:esp32doit-devkit-v1
 
 .PHONY: build test test-unit test-emulator scenario emulator \
@@ -152,8 +152,8 @@ emulator-bridge:
 	socat TCP-LISTEN:$(EMULATOR_PORT),reuseaddr,fork FILE:/tmp/elm_pty,nonblock,raw,echo=0
 
 # ─── Wokwi firmware build ────────────────────────────────────────────────────
-# Compiles Emulators/Wokwi/sketch.ino into a .bin/.elf that the Wokwi VS Code
-# extension can simulate.  Run wokwi-setup once before the first build.
+# Compiles sketches/turbo/turbo.ino with -DSIMULATION into Emulators/Wokwi/build/.
+# The same sketch without -DSIMULATION is the real-device firmware.
 #
 # Install arduino-cli first:
 #   Mac:   brew install arduino-cli
@@ -174,12 +174,13 @@ wokwi-setup:
 wokwi-build:
 	@which $(ARDUINO_CLI) > /dev/null 2>&1 || \
 	    (echo "arduino-cli not found — run: make wokwi-setup" && exit 1)
-	@echo "→ Compiling $(WOKWI_SKETCH)/sketch.ino..."
+	@echo "→ Compiling $(SKETCH)/turbo.ino (SIMULATION mode)..."
 	$(ARDUINO_CLI) compile \
 	    --fqbn $(FQBN) \
+	    --build-property "compiler.cpp.extra_flags=-DSIMULATION" \
 	    --output-dir $(WOKWI_BUILD) \
-	    $(WOKWI_SKETCH)
-	@echo "✓ Firmware ready: $(WOKWI_BUILD)/sketch.ino.bin"
+	    $(SKETCH)
+	@echo "✓ Firmware ready: $(WOKWI_BUILD)/turbo.ino.bin"
 
 # ─── clean ───────────────────────────────────────────────────────────────────
 clean:

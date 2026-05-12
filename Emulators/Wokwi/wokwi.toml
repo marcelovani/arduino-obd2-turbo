@@ -1,4 +1,4 @@
 [wokwi]
 version = 1
-firmware = "build/Wokwi.ino.bin"
-elf     = "build/Wokwi.ino.elf"
+firmware = "build/turbo.ino.bin"
+elf     = "build/turbo.ino.elf"
