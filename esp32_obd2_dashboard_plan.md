@@ -57,13 +57,13 @@ every 100 ms (OBD poll cycle):
 
 ### Tunable thresholds (constants in code)
 
-| Constant             | Default | Meaning                                      |
-| -------------------- | ------- | -------------------------------------------- |
-| `BOV_THROTTLE_HIGH`  | 40 %    | Throttle must have been above this            |
-| `BOV_THROTTLE_LOW`   | 10 %    | Throttle must now be below this               |
-| `BOV_RPM_MIN`        | 1500    | Minimum RPM to trigger (in boost)            |
-| `BOV_MAX_GEAR`       | 2       | Only trigger in gears ≤ this                 |
-| `BOV_COOLDOWN_MS`    | 2000 ms | Minimum gap between consecutive BOV sounds   |
+| Constant            | Default | Meaning                                    |
+| ------------------- | ------- | ------------------------------------------ |
+| `BOV_THROTTLE_HIGH` | 40 %    | Throttle must have been above this         |
+| `BOV_THROTTLE_LOW`  | 10 %    | Throttle must now be below this            |
+| `BOV_RPM_MIN`       | 1500    | Minimum RPM to trigger (in boost)          |
+| `BOV_MAX_GEAR`      | 2       | Only trigger in gears ≤ this               |
+| `BOV_COOLDOWN_MS`   | 2000 ms | Minimum gap between consecutive BOV sounds |
 
 These can be adjusted to taste once tested in the car.
 
@@ -71,19 +71,19 @@ These can be adjusted to taste once tested in the car.
 
 ## 3. Bill of materials
 
-| Item                              | Approx price (UK) | Status       | Notes                                               |
-| --------------------------------- | ----------------- | ------------ | --------------------------------------------------- |
-| ELEGOO ESP-WROOM-32 DevKit        | £6–8              | To order     | Bluetooth Classic + BLE + WiFi. [Amazon link][amz-esp32] |
-| 0.96" SSD1306 OLED (128x64, I2C)  | —                 | Have it      | Model ep0096dtan001a. I2C address 0x3C              |
-| MPU6050 IMU module (I2C)          | —                 | Have it      | 3-axis accelerometer + gyro, address 0x68           |
-| KY-040 rotary encoder module      | —                 | Have it      | 5-pin: CLK / DT / SW / + / GND                     |
-| DFPlayer Mini MP3 module          | —                 | Have it      | Same module used in [arduino-laser-target][laser-target] |
-| microSD card (≤32 GB, FAT32)      | —                 | Check        | Must be formatted FAT32; BOV .mp3 file goes in /mp3/ folder |
-| Small speaker (4–8 Ω, 0.5–3 W)   | £2–3              | Check        | Connects to DFPlayer Mini's built-in 3W amp (SPK1/SPK2) |
-| Breadboard + jumper wires         | —                 | Have it      |                                                     |
-| Micro-USB cable                   | —                 | Have it      | Power + flashing                                    |
-| ELM327 Bluetooth OBD2 dongle      | —                 | Have it      | Bluetooth Classic. [Manufacturer site][elm-home]    |
-| **Total new spend**               | **~£10**          |              | ESP32 + speaker (if needed)                         |
+| Item                             | Approx price (UK) | Status   | Notes                                                       |
+| -------------------------------- | ----------------- | -------- | ----------------------------------------------------------- |
+| ELEGOO ESP-WROOM-32 DevKit       | £6–8              | To order | Bluetooth Classic + BLE + WiFi. [Amazon link][amz-esp32]    |
+| 0.96" SSD1306 OLED (128x64, I2C) | —                 | Have it  | Model ep0096dtan001a. I2C address 0x3C                      |
+| MPU6050 IMU module (I2C)         | —                 | Have it  | 3-axis accelerometer + gyro, address 0x68                   |
+| KY-040 rotary encoder module     | —                 | Have it  | 5-pin: CLK / DT / SW / + / GND                              |
+| DFPlayer Mini MP3 module         | —                 | Have it  | Same module used in [arduino-laser-target][laser-target]    |
+| microSD card (≤32 GB, FAT32)     | —                 | Check    | Must be formatted FAT32; BOV .mp3 file goes in /mp3/ folder |
+| Small speaker (4–8 Ω, 0.5–3 W)   | £2–3              | Check    | Connects to DFPlayer Mini's built-in 3W amp (SPK1/SPK2)     |
+| Breadboard + jumper wires        | —                 | Have it  |                                                             |
+| Micro-USB cable                  | —                 | Have it  | Power + flashing                                            |
+| ELM327 Bluetooth OBD2 dongle     | —                 | Have it  | Bluetooth Classic. [Manufacturer site][elm-home]            |
+| **Total new spend**              | **~£10**          |          | ESP32 + speaker (if needed)                                 |
 
 ### Hardware decisions (from planning session)
 
@@ -161,26 +161,26 @@ These can be adjusted to taste once tested in the car.
 
 ## 5. Wiring
 
-| Component        | ESP32 pin | Notes                                     |
-| ---------------- | --------- | ----------------------------------------- |
-| OLED SDA         | GPIO 21   | I2C SDA (shared bus)                      |
-| OLED SCL         | GPIO 22   | I2C SCL (shared bus)                      |
-| OLED VCC         | 3.3V      |                                           |
-| OLED GND         | GND       |                                           |
-| MPU6050 SDA      | GPIO 21   | Same I2C bus, address 0x68                |
-| MPU6050 SCL      | GPIO 22   |                                           |
-| MPU6050 VCC      | 3.3V      |                                           |
-| MPU6050 GND      | GND       |                                           |
-| KY-040 CLK       | GPIO 25   | Rotary pulse A                            |
-| KY-040 DT        | GPIO 26   | Rotary pulse B                            |
-| KY-040 SW        | GPIO 27   | Push-button, INPUT_PULLUP                 |
-| KY-040 +         | 3.3V      |                                           |
-| KY-040 GND       | GND       |                                           |
-| DFPlayer TX      | GPIO 16   | ESP32 RX2 (receives from DFPlayer)        |
-| DFPlayer RX      | GPIO 17   | ESP32 TX2 (sends commands to DFPlayer)    |
-| DFPlayer VCC     | 5V        | DFPlayer needs 5V (use VIN on ESP32 board)|
-| DFPlayer GND     | GND       |                                           |
-| DFPlayer SPK1/2  | Speaker   | Direct speaker connection (4–8 Ω)         |
+| Component       | ESP32 pin | Notes                                      |
+| --------------- | --------- | ------------------------------------------ |
+| OLED SDA        | GPIO 21   | I2C SDA (shared bus)                       |
+| OLED SCL        | GPIO 22   | I2C SCL (shared bus)                       |
+| OLED VCC        | 3.3V      |                                            |
+| OLED GND        | GND       |                                            |
+| MPU6050 SDA     | GPIO 21   | Same I2C bus, address 0x68                 |
+| MPU6050 SCL     | GPIO 22   |                                            |
+| MPU6050 VCC     | 3.3V      |                                            |
+| MPU6050 GND     | GND       |                                            |
+| KY-040 CLK      | GPIO 25   | Rotary pulse A                             |
+| KY-040 DT       | GPIO 26   | Rotary pulse B                             |
+| KY-040 SW       | GPIO 27   | Push-button, INPUT_PULLUP                  |
+| KY-040 +        | 3.3V      |                                            |
+| KY-040 GND      | GND       |                                            |
+| DFPlayer TX     | GPIO 16   | ESP32 RX2 (receives from DFPlayer)         |
+| DFPlayer RX     | GPIO 17   | ESP32 TX2 (sends commands to DFPlayer)     |
+| DFPlayer VCC    | 5V        | DFPlayer needs 5V (use VIN on ESP32 board) |
+| DFPlayer GND    | GND       |                                            |
+| DFPlayer SPK1/2 | Speaker   | Direct speaker connection (4–8 Ω)          |
 
 > **Note:** DFPlayer RX has a 1kΩ resistor in series to protect it from ESP32
 > 3.3V logic — the DFPlayer is a 5V device. Many modules tolerate 3.3V TX
@@ -199,14 +199,14 @@ These can be adjusted to taste once tested in the car.
 
 ### Libraries (Library Manager)
 
-| Library                   | Purpose                                               |
-| ------------------------- | ----------------------------------------------------- |
-| `BluetoothSerial`         | Built into ESP32 core                                 |
-| `U8g2`                    | OLED — use `U8G2_SSD1306_128X64_NONAME_F_HW_I2C`     |
-| `DFRobotDFPlayerMini`     | DFPlayer Mini MP3 module driver                       |
-| `Bounce2`                 | KY-040 button debounce                                |
-| `Adafruit MPU6050`        | IMU driver                                            |
-| `Adafruit Unified Sensor` | Dependency of MPU6050 lib                             |
+| Library                   | Purpose                                          |
+| ------------------------- | ------------------------------------------------ |
+| `BluetoothSerial`         | Built into ESP32 core                            |
+| `U8g2`                    | OLED — use `U8G2_SSD1306_128X64_NONAME_F_HW_I2C` |
+| `DFRobotDFPlayerMini`     | DFPlayer Mini MP3 module driver                  |
+| `Bounce2`                 | KY-040 button debounce                           |
+| `Adafruit MPU6050`        | IMU driver                                       |
+| `Adafruit Unified Sensor` | Dependency of MPU6050 lib                        |
 
 > **Note:** The [arduino-laser-target][laser-target] reference project uses
 > `U8glib` (older) and `DFRobotDFPlayerMini`. We use **U8g2** (same author,
@@ -239,11 +239,11 @@ terminal. Each command ends with `\r`. Each response ends with `>`.
 
 ### Live queries (polling loop)
 
-| PID      | Command  | Response | Formula           | Range      |
-| -------- | -------- | -------- | ----------------- | ---------- |
-| Throttle | `0111\r` | `4111XX` | `XX × 100 / 255`  | 0–100 %    |
-| Speed    | `010D\r` | `410DXX` | `XX`              | 0–255 km/h |
-| RPM      | `010C\r` | `410CXXYY` | `(XX×256+YY)/4` | 0–16383    |
+| PID      | Command  | Response   | Formula          | Range      |
+| -------- | -------- | ---------- | ---------------- | ---------- |
+| Throttle | `0111\r` | `4111XX`   | `XX × 100 / 255` | 0–100 %    |
+| Speed    | `010D\r` | `410DXX`   | `XX`             | 0–255 km/h |
+| RPM      | `010C\r` | `410CXXYY` | `(XX×256+YY)/4`  | 0–16383    |
 
 ### Gear calculation
 
@@ -347,27 +347,27 @@ and the speaker plays the BOV sound on demand.
 - [ ] Adjustable volume via encoder long-press menu
 - [ ] 3D-printed enclosure
 - [ ] Bluetooth audio — stream BOV sound to car radio via a BT A2DP
-  transmitter module on DFPlayer DAC pins (ESP32's BT is occupied by OBD2,
-  so a separate BT audio module is needed for this)
+      transmitter module on DFPlayer DAC pins (ESP32's BT is occupied by OBD2,
+      so a separate BT audio module is needed for this)
 
 ---
 
 ## 11. Risks and gotchas
 
-| Risk                                        | Mitigation                                                                                     |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Cheap ELM327 clones have buggy firmware     | Test `ATZ` early — should return `ELM327 v1.5`. If garbage, swap the dongle.                  |
-| Bluetooth pairing fiddly first time         | Use `discover()` API with 8 s scan. All retry logic is automatic.                              |
-| Some cars don't support some PIDs           | Send `0100` first — bitmap of supported PIDs. Only poll supported ones.                        |
-| Polling too fast → `NO DATA` responses      | Cap at 10 Hz total across 3 PIDs. Use `ATAT1` for adaptive timing.                            |
-| `\r` vs `\r\n` mismatch with ELM327         | Always send `\r` only; wait for `>` before sending next command.                               |
-| OLED flicker                                | Use U8g2 full-buffer mode (`_F_`).                                                             |
-| ESP32 brown-out during engine crank         | Power from a buffered USB socket; add capacitor on 5V rail.                                    |
-| ATZ takes up to 3 s                         | Use 3000 ms timeout for ATZ; 1000 ms for all other AT commands.                                |
-| DFPlayer busy / sound cut short             | Check BUSY pin (DFPlayer GPIO 16) before triggering next sound; respect cooldown timer.        |
-| BOV triggers too eagerly or not enough      | Tune the four `BOV_*` threshold constants after first real-car test.                           |
-| G-force shows ~1 g at rest                  | Subtract gravity (≈9.81 m/s²) from Z-axis before display.                                     |
-| Manual gearbox — no clutch PID on OBD2      | Throttle-drop detection is the trigger (driver lifts off when pressing clutch). No need to detect clutch directly. |
+| Risk                                    | Mitigation                                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Cheap ELM327 clones have buggy firmware | Test `ATZ` early — should return `ELM327 v1.5`. If garbage, swap the dongle.                                       |
+| Bluetooth pairing fiddly first time     | Use `discover()` API with 8 s scan. All retry logic is automatic.                                                  |
+| Some cars don't support some PIDs       | Send `0100` first — bitmap of supported PIDs. Only poll supported ones.                                            |
+| Polling too fast → `NO DATA` responses  | Cap at 10 Hz total across 3 PIDs. Use `ATAT1` for adaptive timing.                                                 |
+| `\r` vs `\r\n` mismatch with ELM327     | Always send `\r` only; wait for `>` before sending next command.                                                   |
+| OLED flicker                            | Use U8g2 full-buffer mode (`_F_`).                                                                                 |
+| ESP32 brown-out during engine crank     | Power from a buffered USB socket; add capacitor on 5V rail.                                                        |
+| ATZ takes up to 3 s                     | Use 3000 ms timeout for ATZ; 1000 ms for all other AT commands.                                                    |
+| DFPlayer busy / sound cut short         | Check BUSY pin (DFPlayer GPIO 16) before triggering next sound; respect cooldown timer.                            |
+| BOV triggers too eagerly or not enough  | Tune the four `BOV_*` threshold constants after first real-car test.                                               |
+| G-force shows ~1 g at rest              | Subtract gravity (≈9.81 m/s²) from Z-axis before display.                                                          |
+| Manual gearbox — no clutch PID on OBD2  | Throttle-drop detection is the trigger (driver lifts off when pressing clutch). No need to detect clutch directly. |
 
 ---
 
