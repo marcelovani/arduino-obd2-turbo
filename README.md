@@ -29,16 +29,16 @@ distinctive "pssssh" sound. This device detects that moment from OBD2 data:
 
 ## Hardware
 
-| Component               | Notes                                      |
-| ----------------------- | ------------------------------------------ |
-| ELEGOO ESP-WROOM-32     | Main microcontroller — Bluetooth Classic   |
-| ELM327 Bluetooth dongle | Plugs into car OBD2 port                   |
-| 0.96" SSD1306 OLED      | 128×64 I2C display (model ep0096dtan001a)  |
-| DFPlayer Mini           | MP3 playback module — drives the speaker   |
-| MPU6050 IMU             | Accelerometer for G-force display          |
+| Component               | Notes                                                |
+| ----------------------- | ---------------------------------------------------- |
+| ELEGOO ESP-WROOM-32     | Main microcontroller — Bluetooth Classic             |
+| ELM327 Bluetooth dongle | Plugs into car OBD2 port                             |
+| 0.96" SSD1306 OLED      | 128×64 I2C display (model ep0096dtan001a)            |
+| DFPlayer Mini           | MP3 playback module — drives the speaker             |
+| MPU6050 IMU             | Accelerometer for G-force display                    |
 | KY-040 rotary encoder   | Navigation: rotate = cycle views, click = disconnect |
-| microSD card (FAT32)    | Stores BOV sound as `/mp3/0001.mp3`        |
-| Small speaker (4–8 Ω)   | Plays the BOV sound                        |
+| microSD card (FAT32)    | Stores BOV sound as `/mp3/0001.mp3`                  |
+| Small speaker (4–8 Ω)   | Plays the BOV sound                                  |
 
 ---
 
@@ -65,14 +65,14 @@ your first real-car test.
 
 ## Build phases
 
-| Phase | Goal                                                   |
-| ----- | ------------------------------------------------------ |
-| 1     | Hardware verification — OLED, IMU, encoder, DFPlayer   |
-| 2     | OBD2 connection — live throttle/speed/RPM in serial    |
-| 3     | BOV trigger — sound plays on gear change               |
-| 4     | Full UI — OLED gauges, auto-connect, encoder nav       |
-| 5     | Gear calibration for CLA180, refine thresholds         |
-| 6     | Polish — NVS persistence, multiple sounds, enclosure   |
+| Phase | Goal                                                 |
+| ----- | ---------------------------------------------------- |
+| 1     | Hardware verification — OLED, IMU, encoder, DFPlayer |
+| 2     | OBD2 connection — live throttle/speed/RPM in serial  |
+| 3     | BOV trigger — sound plays on gear change             |
+| 4     | Full UI — OLED gauges, auto-connect, encoder nav     |
+| 5     | Gear calibration for CLA180, refine thresholds       |
+| 6     | Polish — NVS persistence, multiple sounds, enclosure |
 
 ---
 

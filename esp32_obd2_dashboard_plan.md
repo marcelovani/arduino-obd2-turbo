@@ -29,7 +29,7 @@ A portable device that:
 5. Displays live gauges on a 0.96" OLED screen
 6. KY-040 rotary encoder to cycle between display views
 
-**Target car:** Mercedes CLA180, 2011, gasoline
+**Target car:** Mercedes CLA180, 2011, gasoline, **manual gearbox**
 
 ---
 
@@ -79,7 +79,7 @@ These can be adjusted to taste once tested in the car.
 | KY-040 rotary encoder module      | —                 | Have it      | 5-pin: CLK / DT / SW / + / GND                     |
 | DFPlayer Mini MP3 module          | —                 | Have it      | Same module used in [arduino-laser-target][laser-target] |
 | microSD card (≤32 GB, FAT32)      | —                 | Check        | Must be formatted FAT32; BOV .mp3 file goes in /mp3/ folder |
-| Small speaker (4–8 Ω, 0.5–3 W)   | £2–3              | Check        | Wires directly to DFPlayer Mini SPK1/SPK2           |
+| Small speaker (4–8 Ω, 0.5–3 W)   | £2–3              | Check        | Connects to DFPlayer Mini's built-in 3W amp (SPK1/SPK2) |
 | Breadboard + jumper wires         | —                 | Have it      |                                                     |
 | Micro-USB cable                   | —                 | Have it      | Power + flashing                                    |
 | ELM327 Bluetooth OBD2 dongle      | —                 | Have it      | Bluetooth Classic. [Manufacturer site][elm-home]    |
@@ -346,6 +346,9 @@ and the speaker plays the BOV sound on demand.
 - [ ] Multiple BOV sounds, play randomly for variety
 - [ ] Adjustable volume via encoder long-press menu
 - [ ] 3D-printed enclosure
+- [ ] Bluetooth audio — stream BOV sound to car radio via a BT A2DP
+  transmitter module on DFPlayer DAC pins (ESP32's BT is occupied by OBD2,
+  so a separate BT audio module is needed for this)
 
 ---
 
@@ -364,7 +367,7 @@ and the speaker plays the BOV sound on demand.
 | DFPlayer busy / sound cut short             | Check BUSY pin (DFPlayer GPIO 16) before triggering next sound; respect cooldown timer.        |
 | BOV triggers too eagerly or not enough      | Tune the four `BOV_*` threshold constants after first real-car test.                           |
 | G-force shows ~1 g at rest                  | Subtract gravity (≈9.81 m/s²) from Z-axis before display.                                     |
-| CLA180 may have DCT automatic gearbox       | BOV throttle-drop detection still works on DCT — no clutch pedal needed. Gear detection via RPM/speed ratio. |
+| Manual gearbox — no clutch PID on OBD2      | Throttle-drop detection is the trigger (driver lifts off when pressing clutch). No need to detect clutch directly. |
 
 ---
 

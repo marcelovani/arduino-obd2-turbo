@@ -12,7 +12,7 @@ sound. It reads live OBD2 data (throttle, RPM, speed) via Bluetooth from an
 ELM327 dongle and plays a "pssssh" MP3 sound through a DFPlayer Mini when
 the driver lifts off the throttle during a gear change.
 
-Target car: Mercedes CLA180, 2011, gasoline.
+Target car: Mercedes CLA180, 2011, gasoline, manual gearbox.
 
 ## Key decisions already made
 
@@ -23,6 +23,9 @@ Target car: Mercedes CLA180, 2011, gasoline.
 - Libraries: U8g2 (not U8glib), DFRobotDFPlayerMini, Bounce2
 - ELM327 is Bluetooth Classic only (not WiFi, not BLE)
 - G-force displayed relative to 1g (gravity subtracted)
+- Gearbox is manual — BOV trigger uses throttle-drop detection (no clutch PID needed)
+- Speaker via DFPlayer Mini's built-in 3W amp (SPK1/SPK2 pins)
+- Future upgrade: Bluetooth audio to car radio via separate A2DP transmitter module (ESP32 BT is occupied by OBD2)
 - BOV triggers on throttle drop: >40% → <10%, RPM >1500, gear ≤ 2
 
 ## Coding conventions
