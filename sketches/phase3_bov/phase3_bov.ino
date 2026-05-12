@@ -141,6 +141,19 @@ void showRunning(float tps, float speed, float rpm) {
 }
 
 // ── Bluetooth scan + connect ──────────────────────────────────────────────
+bool connectWithPin(const String& name) {
+  const char* pins[] = {"1234", "0000"};
+  for (const char* pin : pins) {
+    char msg[24];
+    snprintf(msg, sizeof(msg), "PIN: %s", pin);
+    showMessage("Connecting...", msg);
+    BT.setPin(pin);
+    if (BT.connect(name)) return true;
+    delay(500);
+  }
+  return false;
+}
+
 bool scanAndConnect() {
   showMessage("Scanning BT...", "Looking for ELM327");
   BTScanResults* results = BT.discover(8000);
@@ -159,8 +172,7 @@ bool scanAndConnect() {
 
     if (upper.indexOf("ELM") >= 0 || upper.indexOf("OBD") >= 0 || upper.indexOf("LINK") >= 0) {
       targetName = name;
-      showMessage("Connecting...", targetName.c_str());
-      if (BT.connect(targetName)) return true;
+      if (connectWithPin(targetName)) return true;
     }
   }
   showMessage("ELM327 not found", "Retrying...");

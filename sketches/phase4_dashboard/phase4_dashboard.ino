@@ -234,16 +234,24 @@ void doScanning() {
 
 // ── State: CONNECTING ─────────────────────────────────────────────────────
 void doConnecting() {
-  showMessage("Connecting...", targetName.c_str());
   Serial.printf("Connecting to: %s\n", targetName.c_str());
 
-  if (BT.connect(targetName)) {
-    appState = INIT_ELM;
-  } else {
-    showMessage("Connect failed", "Scanning again...");
-    delay(2000);
-    appState = SCANNING;
+  const char* pins[] = {"1234", "0000"};
+  for (const char* pin : pins) {
+    char msg[24];
+    snprintf(msg, sizeof(msg), "PIN: %s", pin);
+    showMessage("Connecting...", msg);
+    BT.setPin(pin);
+    if (BT.connect(targetName)) {
+      appState = INIT_ELM;
+      return;
+    }
+    delay(500);
   }
+
+  showMessage("Connect failed", "Scanning again...");
+  delay(2000);
+  appState = SCANNING;
 }
 
 // ── State: INIT_ELM ───────────────────────────────────────────────────────

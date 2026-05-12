@@ -141,21 +141,45 @@ Open `phase1_dfplayer/phase1_dfplayer.ino` → Upload.
 **Deploy**
 Open `phase2_obd2/phase2_obd2.ino` → Upload.
 
-**Procedure**
-1. Plug ELM327 dongle into the car's OBD2 port (under dashboard, driver's side).
-2. Turn car ignition to "on" (engine doesn't need to be running for scan, but should run for live data).
-3. Power the ESP32 (USB from laptop or car USB adapter).
-4. Watch OLED — it will show "Scanning BT…", find the dongle, connect, and initialise.
-5. OLED then shows live TPS / Speed / RPM.
+**Bluetooth PIN**
+The sketch automatically tries PIN `1234` then `0000` — both common ELM327 defaults.
+OLED shows which PIN is being tried. No manual pairing needed.
 
-**Expected result**
-- Serial monitor shows the BT scan list, then AT command responses (ATZ, ATE0, etc.).
-- OLED shows updating throttle, speed, RPM with engine running.
+**Connection feedback on OLED**
+- `Scanning BT…` — scanning for devices
+- `Found! <name>` — dongle detected
+- `Connecting… PIN: 1234` — attempting connection
+- `ELM327 ready! <name>` — fully connected and initialised
+- Small **filled dot** in the top-right corner of every screen = BT connected
+- Small **hollow circle** = not connected
+
+**Testing without starting the engine**
+Turn the ignition to ON (dashboard lights up) but don't start the engine.
+The following parameters work immediately:
+
+| Parameter        | What you see                       | Notes                     |
+| ---------------- | ---------------------------------- | ------------------------- |
+| Battery voltage  | `BATT: 12.4V`                      | ~12V off, ~14V running    |
+| Fuel level       | `FUEL: 75%`                        | Approximate               |
+| Coolant temp     | `COOL: 85C`                        | Current engine temp       |
+| Throttle (TPS)   | `TPS: 0%` → press pedal to verify  | Works with ignition on    |
+| Speed / RPM      | Shows 0 until engine is running    | Need engine running       |
+
+**Procedure**
+1. Plug ELM327 into OBD2 port (under dashboard, driver's side).
+2. Turn ignition ON (engine off is fine for first test).
+3. Power ESP32 via USB.
+4. OLED auto-scans, connects, and shows all values within ~15 seconds.
+5. Serial monitor (115200 baud) shows full detail including AT responses.
 
 **If it doesn't connect**
-- Make sure the ELM327 LED is blinking (powered from OBD port).
-- The dongle name must contain "ELM", "OBD", or "LINK". Check serial monitor for the scan list — if the dongle has a different name, add it to the `upper.indexOf(...)` check in the sketch.
-- If you see "STOPPED" or "?" responses from ELM327, the baud rate may be wrong. Try sending `ATBRD1A` (38400 baud).
+- ELM327 LED should be lit/blinking — if not, it's not getting power from OBD port.
+- Check serial monitor — it prints every device found during the scan with its name.
+  If your dongle has an unusual name, add it to the `upper.indexOf(...)` check in the sketch.
+- If PIN fails, check your dongle's manual — some use `6789` or `8888`.
+  Add the PIN to the `pins[]` array in `connectWithPin()`.
+- If you see `STOPPED` or `?` responses from ELM327, the OBD protocol wasn't auto-detected.
+  Change `ATSP0` to `ATSP6` (ISO 15765-4 CAN) which most modern cars use.
 
 ---
 

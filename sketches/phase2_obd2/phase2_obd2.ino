@@ -1,7 +1,13 @@
 // Phase 2 — OBD2 Bluetooth connection test
-// Expected: auto-scans for ELM327, connects, then shows live
-// throttle / speed / RPM on the OLED and serial monitor.
-// Engine must be running.
+//
+// Auto-scans for ELM327, tries PIN 1234 then 0000, and shows live data.
+//
+// Parameters that work with ignition ON, engine OFF:
+//   Battery voltage, fuel level, coolant temperature, throttle position
+// Parameters that need engine RUNNING:
+//   Speed, RPM
+//
+// OLED top-right corner shows connection dot: filled = connected
 //
 // Libraries needed: U8g2
 // Built-in: BluetoothSerial
@@ -13,12 +19,10 @@
 BluetoothSerial BT;
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C display(U8G2_R0, U8X8_PIN_NONE);
 
-#define OBD_TIMEOUT_MS 1000
+// ── OBD2 helpers ──────────────────────────────────────────────────────────
 
-// ── OBD2 helpers ─────────────────────────────────────────────────────────
-
-String obdSend(const char* cmd, uint16_t timeout = OBD_TIMEOUT_MS) {
-  while (BT.available()) BT.read();  // flush stale bytes
+String obdSend(const char* cmd, uint16_t timeout = 1000) {
+  while (BT.available()) BT.read();
   BT.print(cmd);
   BT.print('\r');
 
@@ -31,23 +35,30 @@ String obdSend(const char* cmd, uint16_t timeout = OBD_TIMEOUT_MS) {
       if (c != '\r' && c != '\n') resp += c;
     }
   }
-  return "";  // timeout
+  return "";
 }
 
 float parsePID(const String& resp, int bytes, float multiplier) {
   if (resp.length() < (unsigned)(4 + bytes * 2)) return -1;
-  String hex = resp.substring(4);  // skip "41XX" header
-  if (bytes == 1) {
+  String hex = resp.substring(4);
+  if (bytes == 1)
     return strtol(hex.substring(0, 2).c_str(), nullptr, 16) * multiplier;
-  }
   int hi = strtol(hex.substring(0, 2).c_str(), nullptr, 16);
   int lo = strtol(hex.substring(2, 4).c_str(), nullptr, 16);
   return (hi * 256.0f + lo) * multiplier;
 }
 
-// ── Display helper ────────────────────────────────────────────────────────
+// ── Display helpers ───────────────────────────────────────────────────────
 
-void showMessage(const char* line1, const char* line2 = nullptr) {
+// Small filled dot in top-right = BT connected
+void drawConnectionDot(bool connected) {
+  if (connected)
+    display.drawDisc(124, 4, 3);   // filled circle
+  else
+    display.drawCircle(124, 4, 3); // hollow circle
+}
+
+void showMessage(const char* line1, const char* line2 = nullptr, bool connected = false) {
   display.clearBuffer();
   display.setFont(u8g2_font_ncenB10_tr);
   display.drawStr(0, 18, line1);
@@ -55,6 +66,7 @@ void showMessage(const char* line1, const char* line2 = nullptr) {
     display.setFont(u8g2_font_ncenB08_tr);
     display.drawStr(0, 36, line2);
   }
+  drawConnectionDot(connected);
   display.sendBuffer();
 }
 
@@ -62,9 +74,28 @@ void showMessage(const char* line1, const char* line2 = nullptr) {
 
 String targetName = "";
 
+// Try to connect with PIN 1234, then 0000
+bool connectWithPin(const String& name) {
+  const char* pins[] = {"1234", "0000"};
+  for (const char* pin : pins) {
+    char msg[24];
+    snprintf(msg, sizeof(msg), "PIN: %s", pin);
+    showMessage("Connecting...", msg);
+    Serial.printf("Trying PIN %s for %s\n", pin, name.c_str());
+
+    BT.setPin(pin);
+    if (BT.connect(name)) {
+      Serial.printf("Connected with PIN %s\n", pin);
+      return true;
+    }
+    delay(500);
+  }
+  return false;
+}
+
 bool scanAndConnect() {
   showMessage("Scanning BT...", "Looking for ELM327");
-  Serial.println("Starting BT scan...");
+  Serial.println("Scanning...");
 
   BTScanResults* results = BT.discover(8000);
   if (!results || results->getCount() == 0) {
@@ -85,30 +116,25 @@ bool scanAndConnect() {
     if (upper.indexOf("ELM") >= 0 || upper.indexOf("OBD") >= 0 || upper.indexOf("LINK") >= 0) {
       targetName = name;
       showMessage("Found!", targetName.c_str());
-      delay(500);
+      delay(400);
 
-      showMessage("Connecting...", targetName.c_str());
-      Serial.printf("Connecting to: %s\n", targetName.c_str());
+      if (connectWithPin(targetName)) return true;
 
-      if (BT.connect(targetName)) {
-        Serial.println("Connected!");
-        return true;
-      } else {
-        Serial.println("Connection failed");
-        showMessage("Connect failed", "Retrying...");
-        delay(2000);
-      }
+      showMessage("Connect failed", "Scanning again...");
+      delay(2000);
     }
   }
+  showMessage("ELM327 not found", "Retrying...");
+  delay(3000);
   return false;
 }
 
 bool initElm() {
-  showMessage("ELM327", "Initialising...");
+  showMessage("ELM327", "Initialising...", true);
   Serial.println("Sending AT init sequence...");
 
   String r = obdSend("ATZ", 3000);
-  Serial.printf("ATZ  → [%s]\n", r.c_str());
+  Serial.printf("ATZ   → [%s]\n", r.c_str());
   delay(500);
 
   const char* cmds[] = {"ATE0", "ATL0", "ATS0", "ATH0", "ATSP0"};
@@ -118,8 +144,8 @@ bool initElm() {
     delay(100);
   }
 
-  showMessage("ELM327 ready!", targetName.c_str());
-  delay(1000);
+  showMessage("Connected!", targetName.c_str(), true);
+  delay(800);
   return true;
 }
 
@@ -129,7 +155,7 @@ void setup() {
   Serial.begin(115200);
   Wire.begin();
   display.begin();
-  BT.begin("ESP32-OBD", true);  // Bluetooth Classic master
+  BT.begin("ESP32-OBD", true);
 
   showMessage("OBD2 Test", "Booting...");
   delay(1000);
@@ -138,40 +164,53 @@ void setup() {
   initElm();
 }
 
-// ── Loop — poll and display ───────────────────────────────────────────────
+// ── Loop — poll all parameters ────────────────────────────────────────────
 
 void loop() {
-  String r;
+  // ── Parameters that work with ignition ON, engine OFF ──
+  String r = obdSend("ATRV", 1000);                          // battery voltage
+  float batt    = atof(r.c_str());                           // "12.4V" → 12.4
+
+  r = obdSend("012F");
+  float fuel    = parsePID(r, 1, 100.0f / 255.0f);          // fuel level %
+
+  r = obdSend("0105");
+  float coolant = parsePID(r, 1, 1.0f) - 40.0f;             // coolant °C (A-40)
 
   r = obdSend("0111");
-  float tps   = parsePID(r, 1, 100.0f / 255.0f);
+  float tps     = parsePID(r, 1, 100.0f / 255.0f);          // throttle %
 
+  // ── Parameters that need engine running ──
   r = obdSend("010D");
-  float speed = parsePID(r, 1, 1.0f);
+  float speed   = parsePID(r, 1, 1.0f);                     // km/h
 
   r = obdSend("010C");
-  float rpm   = parsePID(r, 2, 0.25f);
+  float rpm     = parsePID(r, 2, 0.25f);                    // RPM
 
-  Serial.printf("TPS: %.1f%%  Speed: %.0f km/h  RPM: %.0f\n",
-                tps >= 0 ? tps : 0,
-                speed >= 0 ? speed : 0,
-                rpm >= 0 ? rpm : 0);
+  Serial.printf("BATT: %.1fV  FUEL: %.0f%%  COOL: %.0f°C  TPS: %.0f%%  SPD: %.0f  RPM: %.0f\n",
+                batt, fuel >= 0 ? fuel : 0.0f, coolant >= 0 ? coolant : 0.0f,
+                tps >= 0 ? tps : 0.0f, speed >= 0 ? speed : 0.0f, rpm >= 0 ? rpm : 0.0f);
 
-  char buf[24];
+  // ── Draw ──
+  char buf[28];
   display.clearBuffer();
   display.setFont(u8g2_font_ncenB08_tr);
 
-  snprintf(buf, sizeof(buf), "TPS: %.1f%%", tps >= 0 ? tps : 0.0f);
-  display.drawStr(0, 16, buf);
+  snprintf(buf, sizeof(buf), "BATT: %.1fV", batt);
+  display.drawStr(0, 10, buf);
+
+  snprintf(buf, sizeof(buf), "FUEL:%.0f%%  COOL:%.0fC", fuel >= 0 ? fuel : 0.0f, coolant >= 0 ? coolant : 0.0f);
+  display.drawStr(0, 22, buf);
+
+  snprintf(buf, sizeof(buf), "TPS: %.0f%%", tps >= 0 ? tps : 0.0f);
+  display.drawStr(0, 34, buf);
 
   snprintf(buf, sizeof(buf), "SPD: %.0f km/h", speed >= 0 ? speed : 0.0f);
-  display.drawStr(0, 32, buf);
+  display.drawStr(0, 46, buf);
 
   snprintf(buf, sizeof(buf), "RPM: %.0f", rpm >= 0 ? rpm : 0.0f);
-  display.drawStr(0, 48, buf);
+  display.drawStr(0, 58, buf);
 
-  display.setFont(u8g2_font_ncenB06_tr);
-  display.drawStr(0, 62, targetName.c_str());
-
+  drawConnectionDot(true);
   display.sendBuffer();
 }
