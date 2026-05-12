@@ -81,10 +81,16 @@ uint32_t lastDrawMs   = 0;
   uint32_t scenStart          = 0;
 #else
   enum AppState { SCANNING, CONNECTING, INIT_ELM, RUNNING };
-  AppState appState   = SCANNING;
-  String   targetName = "";
-  uint32_t lastPollMs = 0;
+  AppState appState      = SCANNING;
+  String   targetName    = "";
+  uint32_t lastPollMs    = 0;
+  uint32_t lastIdlePollMs = 0;  // slow poll for voltage/coolant when engine off
+  float    metricVoltage = 0;
+  float    metricCoolant = -999;  // °C, -999 = not yet read
+  int      scanFrame     = 0;    // spinner animation index
 #endif
+
+#define ENGINE_IDLE_RPM  200.0f   // RPM below this = engine off, show parked screen
 
 // ── Gear estimation ───────────────────────────────────────────────────────
 // RPM/speed ratio thresholds tuned for a small European petrol car.
@@ -310,23 +316,36 @@ float parsePID(const String& resp, int bytes, float multiplier) {
   return (hi * 256.0f + lo) * multiplier;
 }
 
-void showMessage(const char* line1, const char* line2 = nullptr) {
-  display.clearBuffer();
-  display.setFont(u8g2_font_ncenB10_tr);
-  display.drawStr(0, 18, line1);
-  if (line2) {
-    display.setFont(u8g2_font_ncenB08_tr);
-    display.drawStr(0, 36, line2);
-  }
-  display.sendBuffer();
+// ATRV returns e.g. "12.4V" — just parse the float
+float parseVoltage(const String& resp) {
+  float v = strtof(resp.c_str(), nullptr);
+  return (v > 5.0f && v < 20.0f) ? v : 0;
 }
 
+// ── SCANNING: animated spinner, then blocking BT scan ────────────────────
 void doScanning() {
-  showMessage("Scanning BT...", "Looking for ELM327");
+  static const char SPIN[] = {'-', '/', '|', '\\'};
+  char line1[22];
+  snprintf(line1, sizeof(line1), "Scanning OBD2...  %c", SPIN[scanFrame % 4]);
+  scanFrame++;
+
+  display.clearBuffer();
+  display.setFont(u8g2_font_ncenB10_tr);
+  display.drawStr(0, 20, line1);
+  display.setFont(u8g2_font_ncenB08_tr);
+  display.drawStr(0, 38, "Plug ELM327 into");
+  display.drawStr(0, 52, "OBD2 port & wait");
+  display.sendBuffer();
+
   Serial.println("Scanning for ELM327...");
   BTScanResults* results = BT.discover(8000);
   if (!results || results->getCount() == 0) {
-    showMessage("No devices found", "Retrying...");
+    display.clearBuffer();
+    display.setFont(u8g2_font_ncenB10_tr);
+    display.drawStr(0, 20, "No device found");
+    display.setFont(u8g2_font_ncenB08_tr);
+    display.drawStr(0, 38, "Retrying...");
+    display.sendBuffer();
     delay(3000);
     return;
   }
@@ -341,17 +360,33 @@ void doScanning() {
       return;
     }
   }
-  showMessage("ELM327 not found", "Retrying...");
+  display.clearBuffer();
+  display.setFont(u8g2_font_ncenB10_tr);
+  display.drawStr(0, 20, "ELM327 not found");
+  display.setFont(u8g2_font_ncenB08_tr);
+  display.drawStr(0, 38, "Retrying...");
+  display.sendBuffer();
   delay(3000);
 }
 
+// ── CONNECTING ────────────────────────────────────────────────────────────
 void doConnecting() {
   Serial.printf("Connecting to: %s\n", targetName.c_str());
+
+  display.clearBuffer();
+  display.setFont(u8g2_font_ncenB10_tr);
+  display.drawStr(0, 18, "Found:");
+  display.setFont(u8g2_font_ncenB08_tr);
+  // Truncate long names to fit the 128px display
+  char nameBuf[18];
+  strncpy(nameBuf, targetName.c_str(), 17); nameBuf[17] = '\0';
+  display.drawStr(0, 32, nameBuf);
+  display.drawStr(0, 48, "Connecting...");
+  display.sendBuffer();
+
   const char* pins[] = {"1234", "0000"};
   for (const char* pin : pins) {
-    char msg[24];
-    snprintf(msg, sizeof(msg), "PIN: %s", pin);
-    showMessage("Connecting...", msg);
+    Serial.printf("  Trying PIN %s\n", pin);
     BT.setPin(pin);
     if (BT.connect(targetName)) {
       appState = INIT_ELM;
@@ -359,36 +394,111 @@ void doConnecting() {
     }
     delay(500);
   }
-  showMessage("Connect failed", "Scanning again...");
+  display.clearBuffer();
+  display.setFont(u8g2_font_ncenB10_tr);
+  display.drawStr(0, 20, "Connect failed");
+  display.setFont(u8g2_font_ncenB08_tr);
+  display.drawStr(0, 38, "Scanning again...");
+  display.sendBuffer();
   delay(2000);
   appState = SCANNING;
 }
 
+// ── INIT_ELM ──────────────────────────────────────────────────────────────
 void doInitElm() {
-  showMessage("ELM327", "Initialising...");
+  display.clearBuffer();
+  display.setFont(u8g2_font_ncenB10_tr);
+  display.drawStr(0, 18, "Initialising...");
+  display.setFont(u8g2_font_ncenB08_tr);
+  char nameBuf[18];
+  strncpy(nameBuf, targetName.c_str(), 17); nameBuf[17] = '\0';
+  display.drawStr(0, 32, nameBuf);
+  display.sendBuffer();
+
   obdSend("ATZ", 3000); delay(500);
   const char* cmds[] = {"ATE0", "ATL0", "ATS0", "ATH0", "ATSP0"};
   for (const char* cmd : cmds) { obdSend(cmd, 1500); delay(100); }
-  showMessage("Connected!", targetName.c_str());
-  delay(800);
+
+  // Read battery voltage right after init
+  String vResp = obdSend("ATRV", 1500);
+  metricVoltage = parseVoltage(vResp);
+
+  display.clearBuffer();
+  display.setFont(u8g2_font_ncenB10_tr);
+  display.drawStr(0, 18, "OBD2 connected!");
+  display.setFont(u8g2_font_ncenB08_tr);
+  display.drawStr(0, 32, nameBuf);
+  if (metricVoltage > 0) {
+    char vbuf[16];
+    snprintf(vbuf, sizeof(vbuf), "Battery: %.1fV", metricVoltage);
+    display.drawStr(0, 48, vbuf);
+  }
+  display.sendBuffer();
+  delay(1500);
   appState = RUNNING;
 }
 
+// ── Parked screen (engine off) ────────────────────────────────────────────
+void drawParked() {
+  display.clearBuffer();
+  display.setFont(u8g2_font_ncenB08_tr);
+
+  char nameBuf[18];
+  strncpy(nameBuf, targetName.c_str(), 17); nameBuf[17] = '\0';
+  display.drawStr(0, 10, nameBuf);
+  display.drawHLine(0, 13, 128);
+
+  char buf[24];
+  if (metricVoltage > 0) {
+    snprintf(buf, sizeof(buf), "Battery:  %.1f V", metricVoltage);
+    display.drawStr(0, 27, buf);
+  }
+  if (metricCoolant > -999) {
+    snprintf(buf, sizeof(buf), "Coolant:  %.0f C", metricCoolant);
+    display.drawStr(0, 40, buf);
+  }
+
+  // Blink "Start engine..." at ~0.8 Hz
+  if ((millis() / 600) % 2 == 0) {
+    display.drawStr(0, 56, "Start engine...");
+  }
+
+  display.sendBuffer();
+}
+
+// ── RUNNING ───────────────────────────────────────────────────────────────
 void doRunning() {
   uint32_t now = millis();
-  if (now - lastPollMs >= 100) {
-    String r;
-    r = obdSend("0111"); metricTPS   = max(0.0f, parsePID(r, 1, 100.0f / 255.0f));
-    r = obdSend("010D"); metricSpeed = max(0.0f, parsePID(r, 1, 1.0f));
-    r = obdSend("010C"); metricRPM   = max(0.0f, parsePID(r, 2, 0.25f));
-    checkTurbo(now);
-    lastPollMs = now;
-  }
-  if (now - lastDrawMs >= 50) {
-    drawDisplay();
-    lastDrawMs = now;
-  }
   readEncoder();
+
+  if (metricRPM < ENGINE_IDLE_RPM) {
+    // Engine off — slow-poll voltage and coolant, show parked screen
+    if (now - lastIdlePollMs >= 3000) {
+      String r;
+      r = obdSend("ATRV", 1500);         metricVoltage = parseVoltage(r);
+      r = obdSend("0105", 1000); { float v = parsePID(r, 1, 1.0f); if (v >= 0) metricCoolant = v - 40.0f; }
+      r = obdSend("010C", 1000);         metricRPM = max(0.0f, parsePID(r, 2, 0.25f));
+      lastIdlePollMs = now;
+    }
+    if (now - lastDrawMs >= 100) {
+      drawParked();
+      lastDrawMs = now;
+    }
+  } else {
+    // Engine running — fast-poll all drive metrics, show gauges
+    if (now - lastPollMs >= 100) {
+      String r;
+      r = obdSend("0111"); metricTPS   = max(0.0f, parsePID(r, 1, 100.0f / 255.0f));
+      r = obdSend("010D"); metricSpeed = max(0.0f, parsePID(r, 1, 1.0f));
+      r = obdSend("010C"); metricRPM   = max(0.0f, parsePID(r, 2, 0.25f));
+      checkTurbo(now);
+      lastPollMs = now;
+    }
+    if (now - lastDrawMs >= 50) {
+      drawDisplay();
+      lastDrawMs = now;
+    }
+  }
 }
 
 #endif // !SIMULATION
