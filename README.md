@@ -35,7 +35,6 @@ distinctive "pssssh" sound. This device detects that moment from OBD2 data:
 | ELM327 Bluetooth dongle | Plugs into car OBD2 port                             |
 | 0.96" SSD1306 OLED      | 128×64 I2C display (model ep0096dtan001a)            |
 | DFPlayer Mini           | MP3 playback module — drives the speaker             |
-| MPU6050 IMU             | Accelerometer for G-force display                    |
 | KY-040 rotary encoder   | Navigation: rotate = cycle views, click = disconnect |
 | microSD card (FAT32)    | Stores Turbo sound as `/mp3/0001.mp3`                  |
 | Small speaker (4–8 Ω)   | Plays the Turbo sound                                  |

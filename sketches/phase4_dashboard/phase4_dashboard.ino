@@ -3,15 +3,13 @@
 // Auto-connects to ELM327. OLED shows live gauges. Turbo sound fires on gear change.
 // Rotate encoder to cycle views. Click encoder to disconnect and rescan.
 //
-// Libraries needed: U8g2, DFRobotDFPlayerMini, Bounce2, Adafruit MPU6050, Adafruit Unified Sensor
+// Libraries needed: U8g2, DFRobotDFPlayerMini, Bounce2
 // Built-in: BluetoothSerial
 
 #include <BluetoothSerial.h>
 #include <Wire.h>
 #include <U8g2lib.h>
 #include <DFRobotDFPlayerMini.h>
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
 #include <Bounce2.h>
 
 // ── Pins ──────────────────────────────────────────────────────────────────
@@ -32,7 +30,6 @@
 BluetoothSerial    BT;
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C display(U8G2_R0, U8X8_PIN_NONE);
 DFRobotDFPlayerMini dfplayer;
-Adafruit_MPU6050   mpu;
 Bounce             encBtn;
 
 // ── App state ─────────────────────────────────────────────────────────────
@@ -47,12 +44,11 @@ int      lastClk     = HIGH;
 float metricTPS    = 0;
 float metricSpeed  = 0;
 float metricRPM    = 0;
-float metricGforce = 0;
 float prevTPS      = 0;
 uint32_t lastTurboMs = 0;
 uint32_t turboCount  = 0;
 
-#define NUM_VIEWS 4
+#define NUM_VIEWS 3
 
 // ── OBD2 helpers ──────────────────────────────────────────────────────────
 String obdSend(const char* cmd, uint16_t timeout = 1000) {
@@ -169,16 +165,6 @@ void drawRunning() {
     snprintf(buf, sizeof(buf), turboRecent ? "PSSSSH! #%lu" : "Turbo: %lu", turboCount);
     display.drawStr(0, 62, buf);
 
-  } else {
-    // ── G-force ──
-    display.setFont(u8g2_font_ncenB08_tr);
-    display.drawStr(0, 10, "G-FORCE");
-    display.setFont(u8g2_font_logisoso24_tr);
-    snprintf(buf, sizeof(buf), "%+.1f G", metricGforce);
-    display.drawStr(0, 44, buf);
-    display.setFont(u8g2_font_ncenB08_tr);
-    snprintf(buf, sizeof(buf), "SPD: %.0f  RPM: %.0f", metricSpeed, metricRPM);
-    display.drawStr(0, 60, buf);
   }
 
   display.sendBuffer();
@@ -266,17 +252,10 @@ void doInitElm() {
 }
 
 // ── State: RUNNING ────────────────────────────────────────────────────────
-uint32_t lastPollMs = 0, lastImuMs = 0, lastDrawMs = 0;
+uint32_t lastPollMs = 0, lastDrawMs = 0;
 
 void doRunning() {
   uint32_t now = millis();
-
-  if (now - lastImuMs >= 20) {
-    sensors_event_t a, g, t;
-    mpu.getEvent(&a, &g, &t);
-    metricGforce = (a.acceleration.z - 9.81f) / 9.81f;
-    lastImuMs = now;
-  }
 
   if (now - lastPollMs >= 100) {
     String r;
@@ -302,8 +281,6 @@ void setup() {
   Wire.begin();
 
   display.begin();
-  mpu.begin();
-  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
 
   pinMode(PIN_ENC_CLK, INPUT);
   pinMode(PIN_ENC_DT,  INPUT);

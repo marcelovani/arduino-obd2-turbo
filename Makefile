@@ -169,8 +169,6 @@ wokwi-setup:
 	@echo "→ Installing Arduino libraries..."
 	$(ARDUINO_CLI) lib install "U8g2"
 	$(ARDUINO_CLI) lib install "Bounce2"
-	$(ARDUINO_CLI) lib install "Adafruit MPU6050"
-	$(ARDUINO_CLI) lib install "Adafruit Unified Sensor"
 	@echo "✓ Wokwi setup complete. Run: make wokwi-build"
 
 wokwi-build:

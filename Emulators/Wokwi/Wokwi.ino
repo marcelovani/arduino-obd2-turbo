@@ -6,19 +6,16 @@
 //
 // Hardware wired in the diagram:
 //   SSD1306 OLED  — I2C (SDA=GPIO21, SCL=GPIO22)
-//   MPU6050 IMU   — I2C (SDA=GPIO21, SCL=GPIO22)
 //   KY-040 encoder — CLK=GPIO25, DT=GPIO26, SW=GPIO27
 //   LED (DFPlayer placeholder) — GPIO17 via 1 kΩ resistor
 //
 // Rotate encoder → cycle display views.
 // Push encoder button → reset Turbo counter.
 //
-// Libraries: U8g2, Adafruit MPU6050, Adafruit Unified Sensor, Bounce2
+// Libraries: U8g2, Bounce2
 
 #include <Wire.h>
 #include <U8g2lib.h>
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
 #include <Bounce2.h>
 
 // ── Pins ──────────────────────────────────────────────────────────────────
@@ -36,13 +33,11 @@
 
 // ── Objects ───────────────────────────────────────────────────────────────
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C display(U8G2_R0, U8X8_PIN_NONE);
-Adafruit_MPU6050 mpu;
 Bounce encBtn;
 
 // ── State ─────────────────────────────────────────────────────────────────
 int      currentView  = 0;    // 0=throttle, 1=speed, 2=all metrics
 int      lastClk      = HIGH;
-float    gforce       = 0.0f; // longitudinal G from MPU6050
 
 float    metricTPS    = 0;
 float    metricSpeed  = 0;
@@ -157,14 +152,6 @@ void readEncoder() {
   lastClk = clk;
 }
 
-// ── IMU ───────────────────────────────────────────────────────────────────
-void readIMU() {
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
-  // Longitudinal G: forward acceleration minus gravity component on Z axis
-  gforce = (a.acceleration.z / 9.81f) - 1.0f;
-}
-
 // ── OLED rendering ───────────────────────────────────────────────────────
 void drawDisplay() {
   int gear = estimateGear(metricRPM, metricSpeed);
@@ -182,7 +169,7 @@ void drawDisplay() {
   } else {
     display.setFont(u8g2_font_5x7_tr);
     char hdr[24];
-    snprintf(hdr, sizeof(hdr), "Turbo:%lu  G:%+.1f  [%d]", turboCount, gforce, currentView + 1);
+    snprintf(hdr, sizeof(hdr), "Turbo:%lu  [%d]", turboCount, currentView + 1);
     display.drawStr(0, 8, hdr);
   }
 
@@ -222,7 +209,7 @@ void drawDisplay() {
     display.drawStr(0, 30, line);
     snprintf(line, sizeof(line), "RPM:  %5.0f", metricRPM);
     display.drawStr(0, 40, line);
-    snprintf(line, sizeof(line), "Gear: %d    G:%+.2f", gear, gforce);
+    snprintf(line, sizeof(line), "Gear: %d", gear);
     display.drawStr(0, 50, line);
     snprintf(line, sizeof(line), "Turbo:  %lu", turboCount);
     display.drawStr(0, 60, line);
@@ -253,14 +240,6 @@ void setup() {
   display.drawStr(0, 44, "Starting...");
   display.sendBuffer();
 
-  if (!mpu.begin()) {
-    display.clearBuffer();
-    display.drawStr(0, 24, "MPU6050 error!");
-    display.sendBuffer();
-    while (true) delay(1000);
-  }
-  mpu.setAccelerometerRange(MPU6050_RANGE_4_G);
-
   pinMode(PIN_ENC_CLK, INPUT_PULLUP);
   pinMode(PIN_ENC_DT,  INPUT_PULLUP);
   encBtn.attach(PIN_ENC_SW, INPUT_PULLUP);
@@ -279,7 +258,6 @@ void loop() {
   uint32_t now = millis();
 
   readEncoder();
-  readIMU();
   advanceScenario();
   checkTurbo(now);
   if (now < turboSoundUntilMs) {

@@ -3,5 +3,3 @@
 
 U8g2
 Bounce2
-Adafruit MPU6050
-Adafruit Unified Sensor
