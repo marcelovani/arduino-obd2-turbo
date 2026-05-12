@@ -76,6 +76,35 @@ your first real-car test.
 
 ---
 
+## Wokwi simulation
+
+A browser-based circuit simulation lives in [`Emulators/Wokwi/`](Emulators/Wokwi/).
+It replays a built-in 9-second driving scenario that fires two BOV triggers,
+shows live gauges on the simulated OLED, reads G-force from the MPU6050, and
+lets the encoder cycle views — no hardware needed.
+
+**Option A — wokwi.com (browser, no compilation needed)**
+
+1. Go to [wokwi.com](https://wokwi.com) and create a new ESP32 project
+2. Replace the three files with the contents of `Emulators/Wokwi/`
+3. Press **Play**
+
+**Option B — VS Code / Windsurf extension**
+
+Install the [Wokwi for VS Code](https://marketplace.visualstudio.com/items?itemName=wokwi.wokwi-vscode)
+extension (recommended via `.vscode/extensions.json`), then compile the sketch first:
+
+```bash
+brew install arduino-cli          # Mac — one time
+make wokwi-setup                  # installs ESP32 board + libraries — one time
+make wokwi-build                  # compiles sketch → Emulators/Wokwi/build/
+```
+
+After `make wokwi-build`, open `Emulators/Wokwi/diagram.json` in VS Code and
+press **F1 → Wokwi: Start Simulator**.
+
+---
+
 ## Project plan
 
 Full technical details, wiring table, state machine, all references, and
