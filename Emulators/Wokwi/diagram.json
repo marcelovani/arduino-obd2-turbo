@@ -6,66 +6,65 @@
     {
       "type": "wokwi-esp32-devkit-v1",
       "id": "esp",
-      "top": 112,
+      "top": 64,
       "left": 192,
       "attrs": {}
     },
     {
       "type": "board-ssd1306",
       "id": "oled",
-      "top": 16,
-      "left": 16,
+      "top": 80,
+      "left": 0,
       "attrs": { "i2cAddress": "0x3c" }
     },
     {
       "type": "wokwi-mpu6050",
       "id": "mpu",
-      "top": 272,
-      "left": 16,
+      "top": 256,
+      "left": 0,
       "attrs": {}
     },
     {
       "type": "wokwi-ky-040",
       "id": "enc",
-      "top": 16,
-      "left": 528,
+      "top": 160,
+      "left": 368,
       "attrs": {}
     },
     {
       "type": "wokwi-resistor",
       "id": "r1",
-      "top": 260,
-      "left": 528,
-      "rotate": 90,
+      "top": 184,
+      "left": 40,
       "attrs": { "value": "1000" }
     },
     {
       "type": "wokwi-buzzer",
       "id": "buz",
-      "top": 336,
-      "left": 528,
+      "top": 176,
+      "left": 0,
       "attrs": { "volume": "0.5" }
     }
   ],
   "connections": [
-    ["oled:VCC", "esp:3V3", "red", []],
-    ["oled:GND", "esp:GND", "black", []],
-    ["oled:SDA", "esp:D21", "blue", []],
-    ["oled:SCL", "esp:D22", "green", []],
+    ["oled:VCC", "esp:3V3",   "red",    []],
+    ["oled:GND", "esp:GND.1", "black",  []],
+    ["oled:SDA", "esp:D21",   "blue",   []],
+    ["oled:SCL", "esp:D22",   "green",  []],
 
-    ["mpu:VCC", "esp:3V3", "red", []],
-    ["mpu:GND", "esp:GND", "black", []],
-    ["mpu:SDA", "esp:D21", "blue", []],
-    ["mpu:SCL", "esp:D22", "green", []],
+    ["mpu:VCC",  "esp:3V3",   "red",    []],
+    ["mpu:GND",  "esp:GND.1", "black",  []],
+    ["mpu:SDA",  "esp:D21",   "blue",   []],
+    ["mpu:SCL",  "esp:D22",   "green",  []],
 
-    ["enc:+", "esp:3V3", "red", []],
-    ["enc:GND", "esp:GND", "black", []],
-    ["enc:CLK", "esp:D25", "orange", []],
-    ["enc:DT", "esp:D26", "purple", []],
-    ["enc:SW", "esp:D27", "yellow", []],
+    ["enc:+",    "esp:3V3",   "red",    []],
+    ["enc:GND",  "esp:GND.2", "black",  []],
+    ["enc:CLK",  "esp:D25",   "orange", []],
+    ["enc:DT",   "esp:D26",   "purple", []],
+    ["enc:SW",   "esp:D27",   "yellow", []],
 
-    ["esp:D17", "r1:1", "cyan", []],
-    ["r1:2", "buz:1", "cyan", []],
-    ["buz:2", "esp:GND", "black", []]
+    ["esp:TX2",  "r1:2",      "cyan",   []],
+    ["r1:1",     "buz:1",     "cyan",   []],
+    ["buz:2",    "esp:GND.1", "black",  []]
   ]
 }
