@@ -2,7 +2,7 @@
 Python mirror of the C++ OBD logic in the Arduino sketches.
 
 These functions are kept in sync with the constants and algorithms in:
-  sketches/phase3_bov/phase3_bov.ino
+  sketches/phase3_turbo/phase3_turbo.ino
   sketches/phase4_dashboard/phase4_dashboard.ino
 
 They are used by:
@@ -13,14 +13,14 @@ They are used by:
 When you change a threshold or algorithm in the sketch, update it here too.
 """
 
-# ── BOV trigger thresholds ────────────────────────────────────────────────
-# Keep in sync with #define BOV_* in the sketches
+# ── Turbo trigger thresholds ────────────────────────────────────────────────
+# Keep in sync with #define TURBO_* in the sketches
 
-BOV_THROTTLE_HIGH = 40.0   # TPS must have been above this (accelerating)
-BOV_THROTTLE_LOW  = 10.0   # TPS must now be below this (lifted off)
-BOV_RPM_MIN       = 1500.0 # must be in boost range
-BOV_MAX_GEAR      = 2      # only trigger in 1st and 2nd gear
-BOV_COOLDOWN_MS   = 2000   # min ms between BOV sounds
+TURBO_THROTTLE_HIGH = 40.0   # TPS must have been aturboe this (accelerating)
+TURBO_THROTTLE_LOW  = 10.0   # TPS must now be below this (lifted off)
+TURBO_RPM_MIN       = 1500.0 # must be in boost range
+TURBO_MAX_GEAR      = 2      # only trigger in 1st and 2nd gear
+TURBO_COOLDOWN_MS   = 2000   # min ms between Turbo sounds
 
 
 def parse_pid(resp: str, byte_count: int, multiplier: float) -> float:
@@ -80,24 +80,24 @@ def estimate_gear(rpm: float, speed_kmh: float) -> int:
     return 6
 
 
-class BovTrigger:
+class TurboTrigger:
     """
-    Mirror of C++ checkBov() — stateful BOV trigger logic.
+    Mirror of C++ checkTurbo() — stateful Turbo trigger logic.
 
     Tracks previous TPS and cooldown timer. Call update() on every
-    OBD poll cycle (every 100 ms). Returns True when BOV should fire.
+    OBD poll cycle (every 100 ms). Returns True when Turbo should fire.
 
     Thresholds can be overridden for scenario tuning:
-        trigger = BovTrigger(throttle_high=35, rpm_min=1200)
+        trigger = TurboTrigger(throttle_high=35, rpm_min=1200)
     """
 
     def __init__(
         self,
-        throttle_high: float = BOV_THROTTLE_HIGH,
-        throttle_low:  float = BOV_THROTTLE_LOW,
-        rpm_min:       float = BOV_RPM_MIN,
-        max_gear:      int   = BOV_MAX_GEAR,
-        cooldown_ms:   float = BOV_COOLDOWN_MS,
+        throttle_high: float = TURBO_THROTTLE_HIGH,
+        throttle_low:  float = TURBO_THROTTLE_LOW,
+        rpm_min:       float = TURBO_RPM_MIN,
+        max_gear:      int   = TURBO_MAX_GEAR,
+        cooldown_ms:   float = TURBO_COOLDOWN_MS,
     ):
         self.throttle_high = throttle_high
         self.throttle_low  = throttle_low
@@ -106,25 +106,25 @@ class BovTrigger:
         self.cooldown_ms   = cooldown_ms
 
         self._prev_tps    = 0.0
-        self._last_bov_ms = -(cooldown_ms + 1)  # allow immediate first trigger
+        self._last_turbo_ms = -(cooldown_ms + 1)  # allow immediate first trigger
         self.count        = 0
         self.events: list[dict] = []             # log of every trigger
 
     def update(self, tps: float, rpm: float, speed: float, now_ms: float) -> bool:
         """
         Process one poll cycle.
-        Returns True if BOV triggered this cycle.
+        Returns True if Turbo triggered this cycle.
         """
         gear = estimate_gear(rpm, speed)
         triggered = (
-            now_ms - self._last_bov_ms >= self.cooldown_ms
+            now_ms - self._last_turbo_ms >= self.cooldown_ms
             and self._prev_tps > self.throttle_high
             and tps            < self.throttle_low
             and rpm            > self.rpm_min
             and 0 < gear      <= self.max_gear
         )
         if triggered:
-            self._last_bov_ms = now_ms
+            self._last_turbo_ms = now_ms
             self.count += 1
             self.events.append({
                 "time_ms":  now_ms,

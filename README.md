@@ -1,7 +1,7 @@
 # Arduino OBD2 Turbo Blow-Off Valve Emulator
 
 An ESP32 device that reads live OBD2 data from your car and plays a turbo
-blow-off valve (BOV) "pssssh" sound through a speaker whenever you lift off
+blow-off valve (Turbo) "pssssh" sound through a speaker whenever you lift off
 the throttle during a gear change — emulating the iconic Fast & Furious
 turbo sound.
 
@@ -19,7 +19,7 @@ distinctive "pssssh" sound. This device detects that moment from OBD2 data:
 1. Connects to the car's OBD2 port via a Bluetooth ELM327 dongle
 2. Monitors throttle position and RPM at 10 Hz
 3. When throttle drops rapidly from high to low while RPM is in the boost
-   range (and in 1st or 2nd gear), it triggers a pre-recorded BOV sound
+   range (and in 1st or 2nd gear), it triggers a pre-recorded Turbo sound
    through a small speaker
 4. Displays live gauges on a 0.96" OLED screen
 
@@ -37,12 +37,12 @@ distinctive "pssssh" sound. This device detects that moment from OBD2 data:
 | DFPlayer Mini           | MP3 playback module — drives the speaker             |
 | MPU6050 IMU             | Accelerometer for G-force display                    |
 | KY-040 rotary encoder   | Navigation: rotate = cycle views, click = disconnect |
-| microSD card (FAT32)    | Stores BOV sound as `/mp3/0001.mp3`                  |
-| Small speaker (4–8 Ω)   | Plays the BOV sound                                  |
+| microSD card (FAT32)    | Stores Turbo sound as `/mp3/0001.mp3`                  |
+| Small speaker (4–8 Ω)   | Plays the Turbo sound                                  |
 
 ---
 
-## BOV trigger logic
+## Turbo trigger logic
 
 ```
 throttle was > 40%  AND  throttle now < 10%
@@ -69,7 +69,7 @@ your first real-car test.
 | ----- | ---------------------------------------------------- |
 | 1     | Hardware verification — OLED, IMU, encoder, DFPlayer |
 | 2     | OBD2 connection — live throttle/speed/RPM in serial  |
-| 3     | BOV trigger — sound plays on gear change             |
+| 3     | Turbo trigger — sound plays on gear change             |
 | 4     | Full UI — OLED gauges, auto-connect, encoder nav     |
 | 5     | Gear calibration for CLA180, refine thresholds       |
 | 6     | Polish — NVS persistence, multiple sounds, enclosure |
@@ -79,20 +79,26 @@ your first real-car test.
 ## Wokwi simulation
 
 A browser-based circuit simulation lives in [`Emulators/Wokwi/`](Emulators/Wokwi/).
-It replays a built-in 9-second driving scenario that fires two BOV triggers,
+It replays a built-in 9-second driving scenario that fires two Turbo triggers,
 shows live gauges on the simulated OLED, reads G-force from the MPU6050, and
 lets the encoder cycle views — no hardware needed.
 
 **Option A — wokwi.com (browser, no compilation needed)**
 
 1. Go to [wokwi.com](https://wokwi.com) and create a new ESP32 project
-2. Replace the three files with the contents of `Emulators/Wokwi/`
+2. Copy `diagram.json`, `libraries.txt`, and `Wokwi.ino` from `Emulators/Wokwi/`
+   into the project (rename `Wokwi.ino` → `sketch.ino` in the wokwi.com editor)
 3. Press **Play**
 
 **Option B — VS Code / Windsurf extension**
 
-Install the [Wokwi for VS Code](https://marketplace.visualstudio.com/items?itemName=wokwi.wokwi-vscode)
-extension (recommended via `.vscode/extensions.json`), then compile the sketch first:
+See the full setup guide at [docs.wokwi.com/vscode/getting-started](https://docs.wokwi.com/vscode/getting-started).
+The extension is recommended via `.vscode/extensions.json`.
+
+1. Install the **Wokwi for VS Code** extension from the marketplace
+2. Press **F1 → Wokwi: Request a new License**, then click **GET YOUR LICENSE**
+   on the Wokwi website and approve the browser prompt — a free account is enough
+3. Compile the sketch (firmware must exist before the simulator can run):
 
 ```bash
 brew install arduino-cli          # Mac — one time
@@ -100,8 +106,7 @@ make wokwi-setup                  # installs ESP32 board + libraries — one tim
 make wokwi-build                  # compiles sketch → Emulators/Wokwi/build/
 ```
 
-After `make wokwi-build`, open `Emulators/Wokwi/diagram.json` in VS Code and
-press **F1 → Wokwi: Start Simulator**.
+4. Open `Emulators/Wokwi/diagram.json` in VS Code and press **F1 → Wokwi: Start Simulator**
 
 ---
 

@@ -103,8 +103,8 @@ Open `phase1_encoder/phase1_encoder.ino` → Upload.
 **SD card preparation (do this before wiring)**
 1. Format the microSD card as **FAT32**.
 2. Create a folder called `mp3` on the card.
-3. Put your BOV sound file in `/mp3/0001.mp3`.
-   (Download a free BOV sample — search "turbo blow off valve sound effect mp3".)
+3. Put your Turbo sound file in `/mp3/0001.mp3`.
+   (Download a free Turbo sample — search "turbo blow off valve sound effect mp3".)
 4. Insert card into DFPlayer Mini.
 
 **Wiring**
@@ -124,7 +124,7 @@ Open `phase1_dfplayer/phase1_dfplayer.ino` → Upload.
 
 **Expected result**
 - OLED shows "DFPlayer ready!" and "Click to play".
-- Press the encoder button → speaker plays the BOV sound.
+- Press the encoder button → speaker plays the Turbo sound.
 - Serial monitor confirms "Playing track 1".
 
 **If "DFPlayer FAILED"**
@@ -183,27 +183,27 @@ The following parameters work immediately:
 
 ---
 
-## Phase 3 — BOV trigger (`phase3_bov/`)
+## Phase 3 — Turbo trigger (`phase3_turbo/`)
 
 **Hardware needed:** everything from Phase 2, plus DFPlayer Mini + speaker.
 
 **Deploy**
-Open `phase3_bov/phase3_bov.ino` → Upload.
+Open `phase3_turbo/phase3_turbo.ino` → Upload.
 
 **Procedure**
 1. Full setup in the car with engine running.
 2. Accelerate in 1st gear past ~1500 RPM with >40% throttle.
 3. Lift off sharply (as if pressing clutch to change gear).
-4. Speaker should play the BOV sound.
+4. Speaker should play the Turbo sound.
 
 **Tuning**
-If the BOV triggers too often or not enough, edit the constants at the top of the sketch:
+If the Turbo triggers too often or not enough, edit the constants at the top of the sketch:
 ```cpp
-#define BOV_THROTTLE_HIGH  40.0f   // lower = triggers more easily
-#define BOV_THROTTLE_LOW   10.0f   // higher = triggers more easily
-#define BOV_RPM_MIN        1500.0f // lower = triggers at lower revs
+#define TURBO_THROTTLE_HIGH  40.0f   // lower = triggers more easily
+#define TURBO_THROTTLE_LOW   10.0f   // higher = triggers more easily
+#define TURBO_RPM_MIN        1500.0f // lower = triggers at lower revs
 ```
-Re-upload after each change. Serial monitor shows `BOV! TPS X→Y% RPM Z Gear N` every time it fires.
+Re-upload after each change. Serial monitor shows `Turbo! TPS X→Y% RPM Z Gear N` every time it fires.
 
 **Gear thresholds**
 The `estimateGear()` function uses rough RPM/speed ratios. After you've driven in each gear, note the RPM and speed values from the serial monitor and adjust the thresholds in the function to match your CLA180.
@@ -224,5 +224,5 @@ Open `phase4_dashboard/phase4_dashboard.ino` → Upload.
 **Views**
 1. Large throttle % + current gear + speed
 2. Large speed + gear + RPM
-3. All metrics as text + BOV count
+3. All metrics as text + Turbo count
 4. G-force reading + speed + RPM

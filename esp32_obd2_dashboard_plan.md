@@ -1,7 +1,7 @@
 # Arduino OBD2 Turbo Blow-Off Valve Emulator — Project Plan
 
 A device that reads live OBD2 data from the car and plays a turbo
-blow-off valve (BOV) "pssssh" sound through a speaker whenever the driver
+blow-off valve (Turbo) "pssssh" sound through a speaker whenever the driver
 lifts off the throttle at speed during a gear change — emulating the iconic
 Fast & Furious turbo sound.
 
@@ -18,13 +18,13 @@ A portable device that:
 2. Reads live signals from the car:
    - **Throttle position** (% pedal pressed)
    - **Speed** (km/h)
-   - **RPM** (used for gear calculation and BOV trigger)
+   - **RPM** (used for gear calculation and Turbo trigger)
    - **Gear** (calculated from RPM ÷ speed ratio)
 3. Reads one signal from the ESP32 itself:
    - **Acceleration** (G-force relative to 1g, from MPU6050 IMU)
-4. **Plays a BOV sound** via DFPlayer Mini + speaker when:
+4. **Plays a Turbo sound** via DFPlayer Mini + speaker when:
    - Throttle drops rapidly from high to low (driver lifted off / gear change)
-   - RPM is above the boost threshold (~1500 RPM)
+   - RPM is aturboe the boost threshold (~1500 RPM)
    - Current gear is 1st or 2nd (configurable)
 5. Displays live gauges on a 0.96" OLED screen
 6. KY-040 rotary encoder to cycle between display views
@@ -33,25 +33,25 @@ A portable device that:
 
 ---
 
-## 2. How the BOV sound trigger works
+## 2. How the Turbo sound trigger works
 
 A turbo blow-off valve vents pressurised intake air when the driver lifts
 off the throttle (closing the throttle plate while the turbo is still
 spinning). The escaping air makes the characteristic "pssssh" / "ksss"
 sound. This device detects that moment from OBD2 data and plays a
-pre-recorded BOV sample through the speaker.
+pre-recorded Turbo sample through the speaker.
 
 ### Trigger algorithm
 
 ```
 every 100 ms (OBD poll cycle):
 
-  if (throttle_prev  > BOV_THROTTLE_HIGH   // was accelerating (e.g. >40%)
-  AND throttle_now   < BOV_THROTTLE_LOW    // now lifted off    (e.g. <10%)
-  AND rpm_now        > BOV_RPM_MIN         // in boost range    (e.g. >1500)
-  AND current_gear  <= BOV_MAX_GEAR        // 1st or 2nd gear
-  AND time_since_last_bov > BOV_COOLDOWN): // not already playing
-      play BOV sound
+  if (throttle_prev  > TURBO_THROTTLE_HIGH   // was accelerating (e.g. >40%)
+  AND throttle_now   < TURBO_THROTTLE_LOW    // now lifted off    (e.g. <10%)
+  AND rpm_now        > TURBO_RPM_MIN         // in boost range    (e.g. >1500)
+  AND current_gear  <= TURBO_MAX_GEAR        // 1st or 2nd gear
+  AND time_since_last_turbo > TURBO_COOLDOWN): // not already playing
+      play Turbo sound
       record timestamp
 ```
 
@@ -59,11 +59,11 @@ every 100 ms (OBD poll cycle):
 
 | Constant            | Default | Meaning                                    |
 | ------------------- | ------- | ------------------------------------------ |
-| `BOV_THROTTLE_HIGH` | 40 %    | Throttle must have been above this         |
-| `BOV_THROTTLE_LOW`  | 10 %    | Throttle must now be below this            |
-| `BOV_RPM_MIN`       | 1500    | Minimum RPM to trigger (in boost)          |
-| `BOV_MAX_GEAR`      | 2       | Only trigger in gears ≤ this               |
-| `BOV_COOLDOWN_MS`   | 2000 ms | Minimum gap between consecutive BOV sounds |
+| `TURBO_THROTTLE_HIGH` | 40 %    | Throttle must have been aturboe this         |
+| `TURBO_THROTTLE_LOW`  | 10 %    | Throttle must now be below this            |
+| `TURBO_RPM_MIN`       | 1500    | Minimum RPM to trigger (in boost)          |
+| `TURBO_MAX_GEAR`      | 2       | Only trigger in gears ≤ this               |
+| `TURBO_COOLDOWN_MS`   | 2000 ms | Minimum gap between consecutive Turbo sounds |
 
 These can be adjusted to taste once tested in the car.
 
@@ -78,7 +78,7 @@ These can be adjusted to taste once tested in the car.
 | MPU6050 IMU module (I2C)         | —                 | Have it  | 3-axis accelerometer + gyro, address 0x68                   |
 | KY-040 rotary encoder module     | —                 | Have it  | 5-pin: CLK / DT / SW / + / GND                              |
 | DFPlayer Mini MP3 module         | —                 | Have it  | Same module used in [arduino-laser-target][laser-target]    |
-| microSD card (≤32 GB, FAT32)     | —                 | Check    | Must be formatted FAT32; BOV .mp3 file goes in /mp3/ folder |
+| microSD card (≤32 GB, FAT32)     | —                 | Check    | Must be formatted FAT32; Turbo .mp3 file goes in /mp3/ folder |
 | Small speaker (4–8 Ω, 0.5–3 W)   | £2–3              | Check    | Connects to DFPlayer Mini's built-in 3W amp (SPK1/SPK2)     |
 | Breadboard + jumper wires        | —                 | Have it  |                                                             |
 | Micro-USB cable                  | —                 | Have it  | Power + flashing                                            |
@@ -130,7 +130,7 @@ These can be adjusted to taste once tested in the car.
 │      ┌────────────┼─────────────┐                   │
 │      ▼            ▼             ▼                   │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐     │
-│  │  OLED    │ │  KY-040  │ │  BOV Trigger     │     │
+│  │  OLED    │ │  KY-040  │ │  Turbo Trigger     │     │
 │  │ (gauges) │ │ encoder  │ │  → DFPlayer Mini │     │
 │  └──────────┘ └──────────┘ └────────┬─────────┘     │
 │                                     │               │
@@ -138,7 +138,7 @@ These can be adjusted to taste once tested in the car.
                                       ▼
                                ┌─────────────┐
                                │  Speaker    │
-                               │  (BOV sound)│
+                               │  (Turbo sound)│
                                └─────────────┘
 ```
 
@@ -147,7 +147,7 @@ These can be adjusted to taste once tested in the car.
 - **Bluetooth Classic** — works with the ELM327 dongle via `BluetoothSerial`.
 - **Auto-connect** — scans for any BT device containing "ELM", "OBD", or
   "LINK" in the name; connects without user input.
-- **BOV trigger is event-driven** — checked every OBD poll cycle (100 ms);
+- **Turbo trigger is event-driven** — checked every OBD poll cycle (100 ms);
   compares current vs previous throttle reading.
 - **DFPlayer Mini** — standalone MP3 module with its own SD card; the ESP32
   sends a single UART command to trigger playback. No audio processing on
@@ -216,8 +216,8 @@ These can be adjusted to taste once tested in the car.
 
 1. Format microSD card as **FAT32**
 2. Create folder `/mp3/`
-3. Name the BOV sound file `0001.mp3` (DFPlayer uses numeric filenames)
-4. Optionally add more sounds: `0002.mp3` = softer BOV, `0003.mp3` = longer, etc.
+3. Name the Turbo sound file `0001.mp3` (DFPlayer uses numeric filenames)
+4. Optionally add more sounds: `0002.mp3` = softer Turbo, `0003.mp3` = longer, etc.
 
 ---
 
@@ -269,7 +269,7 @@ v0 shows the raw ratio; v1 maps it to a gear number.
 [INIT_ELM]  ────── AT command sequence, "Initialising…"
   │                  failure → SCANNING
   ▼
-[RUNNING]   ────── live gauges + BOV trigger active
+[RUNNING]   ────── live gauges + Turbo trigger active
                rotate encoder → cycle views:
                  1. Throttle (large) + Speed
                  2. Speed (large) + RPM
@@ -285,7 +285,7 @@ v0 shows the raw ratio; v1 maps it to a gear number.
 ```
 every 100 ms:
     poll throttle, speed, RPM  →  ring buffers
-    check BOV trigger
+    check Turbo trigger
 
 every 20 ms:
     sample IMU  →  ring buffer
@@ -307,7 +307,7 @@ every 50 ms:
 - [ ] Wire DFPlayer Mini, play `0001.mp3` from SD card
 
 **Done when:** Turning the encoder prints direction, OLED shows a counter,
-and the speaker plays the BOV sound on demand.
+and the speaker plays the Turbo sound on demand.
 
 ### Phase 2: OBD2 connection (day 2)
 
@@ -317,14 +317,14 @@ and the speaker plays the BOV sound on demand.
 
 **Done when:** Serial monitor shows live throttle/speed/RPM in the car.
 
-### Phase 3: BOV trigger (day 3) — core feature
+### Phase 3: Turbo trigger (day 3) — core feature
 
 - [ ] Implement throttle-drop detection algorithm
-- [ ] Trigger DFPlayer on BOV event
-- [ ] Test in car: accelerate in 1st, lift off — BOV sound plays
-- [ ] Tune `BOV_THROTTLE_HIGH`, `BOV_THROTTLE_LOW`, `BOV_RPM_MIN`
+- [ ] Trigger DFPlayer on Turbo event
+- [ ] Test in car: accelerate in 1st, lift off — Turbo sound plays
+- [ ] Tune `TURBO_THROTTLE_HIGH`, `TURBO_THROTTLE_LOW`, `TURBO_RPM_MIN`
 
-**Done when:** The BOV sound plays naturally on every gear change.
+**Done when:** The Turbo sound plays naturally on every gear change.
 
 ### Phase 4: Display + full UI (day 4)
 
@@ -337,16 +337,16 @@ and the speaker plays the BOV sound on demand.
 
 - [ ] Log RPM/speed ratios per gear for the CLA180
 - [ ] Map ratios to gear numbers
-- [ ] Restrict BOV to gear 1 and 2 only
+- [ ] Restrict Turbo to gear 1 and 2 only
 - [ ] Add cooldown to prevent double-trigger
 
 ### Phase 6: Polish (optional)
 
 - [ ] Persist ELM327 address in NVS (auto-reconnect on boot)
-- [ ] Multiple BOV sounds, play randomly for variety
+- [ ] Multiple Turbo sounds, play randomly for variety
 - [ ] Adjustable volume via encoder long-press menu
 - [ ] 3D-printed enclosure
-- [ ] Bluetooth audio — stream BOV sound to car radio via a BT A2DP
+- [ ] Bluetooth audio — stream Turbo sound to car radio via a BT A2DP
       transmitter module on DFPlayer DAC pins (ESP32's BT is occupied by OBD2,
       so a separate BT audio module is needed for this)
 
@@ -365,7 +365,7 @@ and the speaker plays the BOV sound on demand.
 | ESP32 brown-out during engine crank     | Power from a buffered USB socket; add capacitor on 5V rail.                                                        |
 | ATZ takes up to 3 s                     | Use 3000 ms timeout for ATZ; 1000 ms for all other AT commands.                                                    |
 | DFPlayer busy / sound cut short         | Check BUSY pin (DFPlayer GPIO 16) before triggering next sound; respect cooldown timer.                            |
-| BOV triggers too eagerly or not enough  | Tune the four `BOV_*` threshold constants after first real-car test.                                               |
+| Turbo triggers too eagerly or not enough  | Tune the four `TURBO_*` threshold constants after first real-car test.                                               |
 | G-force shows ~1 g at rest              | Subtract gravity (≈9.81 m/s²) from Z-axis before display.                                                          |
 | Manual gearbox — no clutch PID on OBD2  | Throttle-drop detection is the trigger (driver lifts off when pressing clutch). No need to detect clutch directly. |
 
@@ -373,7 +373,7 @@ and the speaker plays the BOV sound on demand.
 
 ## 12. References
 
-### BOV / turbo sounds
+### Turbo / turbo sounds
 
 - **Reddit — what causes the "ksss" sound in Fast & Furious:**
   https://www.reddit.com/r/cars/comments/rl8a5e/what_causes_the_ksss_sound_in_the_fast_furious_1/
@@ -430,12 +430,12 @@ and the speaker plays the BOV sound on demand.
 #define PIN_DFP_RX   16   // ESP32 RX2 ← DFPlayer TX
 #define PIN_DFP_TX   17   // ESP32 TX2 → DFPlayer RX
 
-// ── BOV thresholds (tune after first car test) ────────────────────────────
-#define BOV_THROTTLE_HIGH  40.0f   // % — was accelerating
-#define BOV_THROTTLE_LOW   10.0f   // % — now lifted off
-#define BOV_RPM_MIN        1500.0f // RPM — in boost range
-#define BOV_MAX_GEAR       2       // only gears 1 and 2
-#define BOV_COOLDOWN_MS    2000    // ms between sounds
+// ── Turbo thresholds (tune after first car test) ────────────────────────────
+#define TURBO_THROTTLE_HIGH  40.0f   // % — was accelerating
+#define TURBO_THROTTLE_LOW   10.0f   // % — now lifted off
+#define TURBO_RPM_MIN        1500.0f // RPM — in boost range
+#define TURBO_MAX_GEAR       2       // only gears 1 and 2
+#define TURBO_COOLDOWN_MS    2000    // ms between sounds
 
 // ── Objects ───────────────────────────────────────────────────────────────
 BluetoothSerial BT;
@@ -456,21 +456,21 @@ float metricGear  = 0;
 float metricGforce= 0;
 float prevTPS     = 0;
 
-// ── BOV ───────────────────────────────────────────────────────────────────
-uint32_t lastBovMs = 0;
+// ── Turbo ───────────────────────────────────────────────────────────────────
+uint32_t lastTurboMs = 0;
 
-void checkBovTrigger() {
+void checkTurboTrigger() {
     uint32_t now = millis();
-    if (now - lastBovMs < BOV_COOLDOWN_MS) return;
+    if (now - lastTurboMs < TURBO_COOLDOWN_MS) return;
 
-    if (prevTPS      > BOV_THROTTLE_HIGH &&
-        metricTPS    < BOV_THROTTLE_LOW  &&
-        metricRPM    > BOV_RPM_MIN       &&
+    if (prevTPS      > TURBO_THROTTLE_HIGH &&
+        metricTPS    < TURBO_THROTTLE_LOW  &&
+        metricRPM    > TURBO_RPM_MIN       &&
         metricGear   > 0                 &&
-        metricGear  <= BOV_MAX_GEAR) {
+        metricGear  <= TURBO_MAX_GEAR) {
         dfplayer.play(1);   // play /mp3/0001.mp3
-        lastBovMs = now;
-        Serial.println("BOV triggered!");
+        lastTurboMs = now;
+        Serial.println("Turbo triggered!");
     }
     prevTPS = metricTPS;
 }

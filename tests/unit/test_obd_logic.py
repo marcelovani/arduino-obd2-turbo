@@ -1,5 +1,5 @@
 """
-Unit tests for OBD logic — parsePID, estimateGear, BovTrigger.
+Unit tests for OBD logic — parsePID, estimateGear, TurboTrigger.
 
 These tests run entirely in Python with no hardware and no emulator.
 They verify that the logic in tests/obd_logic.py (which mirrors the C++
@@ -13,8 +13,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
-from obd_logic import parse_pid, estimate_gear, BovTrigger
-from scenarios.definitions import SCENARIOS, EXPECTED_BOV_COUNTS
+from obd_logic import parse_pid, estimate_gear, TurboTrigger
+from scenarios.definitions import SCENARIOS, EXPECTED_TURBO_COUNTS
 
 
 # ── parse_pid ─────────────────────────────────────────────────────────────
@@ -106,108 +106,108 @@ class TestEstimateGear:
         assert estimate_gear(2000, 100) == 6
 
 
-# ── BovTrigger ────────────────────────────────────────────────────────────
+# ── TurboTrigger ────────────────────────────────────────────────────────────
 
-class TestBovTrigger:
+class TestTurboTrigger:
 
     def _make_trigger(self, **kwargs):
-        return BovTrigger(**kwargs)
+        return TurboTrigger(**kwargs)
 
     def test_no_trigger_at_idle(self):
-        bov = BovTrigger()
+        turbo = TurboTrigger()
         # idle: TPS low, RPM low
-        assert not bov.update(0, 800, 0, 0)
-        assert not bov.update(0, 800, 0, 100)
-        assert bov.count == 0
+        assert not turbo.update(0, 800, 0, 0)
+        assert not turbo.update(0, 800, 0, 100)
+        assert turbo.count == 0
 
     def test_triggers_on_sharp_lift_in_first_gear(self):
-        bov = BovTrigger()
-        bov.update(80, 3200, 22, 0)     # high TPS, 1st gear
-        triggered = bov.update(4, 3100, 24, 100)  # lift off
+        turbo = TurboTrigger()
+        turbo.update(80, 3200, 22, 0)     # high TPS, 1st gear
+        triggered = turbo.update(4, 3100, 24, 100)  # lift off
         assert triggered
-        assert bov.count == 1
+        assert turbo.count == 1
 
     def test_no_trigger_when_rpm_too_low(self):
-        bov = BovTrigger()
-        bov.update(75, 1200, 12, 0)    # high TPS but RPM < 1500
-        triggered = bov.update(4, 1100, 14, 100)
+        turbo = TurboTrigger()
+        turbo.update(75, 1200, 12, 0)    # high TPS but RPM < 1500
+        triggered = turbo.update(4, 1100, 14, 100)
         assert not triggered
-        assert bov.count == 0
+        assert turbo.count == 0
 
     def test_no_trigger_in_third_gear(self):
-        bov = BovTrigger()
-        bov.update(80, 2800, 55, 0)    # 3rd gear (ratio ~51)
-        triggered = bov.update(4, 2600, 57, 100)
+        turbo = TurboTrigger()
+        turbo.update(80, 2800, 55, 0)    # 3rd gear (ratio ~51)
+        triggered = turbo.update(4, 2600, 57, 100)
         assert not triggered
-        assert bov.count == 0
+        assert turbo.count == 0
 
     def test_no_trigger_when_prev_tps_not_high_enough(self):
-        bov = BovTrigger()
-        bov.update(35, 3000, 22, 0)    # TPS only 35% — below 40% threshold
-        triggered = bov.update(4, 2900, 24, 100)
+        turbo = TurboTrigger()
+        turbo.update(35, 3000, 22, 0)    # TPS only 35% — below 40% threshold
+        triggered = turbo.update(4, 2900, 24, 100)
         assert not triggered
 
     def test_no_trigger_when_curr_tps_not_low_enough(self):
-        bov = BovTrigger()
-        bov.update(80, 3200, 22, 0)
-        triggered = bov.update(15, 3100, 24, 100)  # 15% — above 10% threshold
+        turbo = TurboTrigger()
+        turbo.update(80, 3200, 22, 0)
+        triggered = turbo.update(15, 3100, 24, 100)  # 15% — aturboe 10% threshold
         assert not triggered
 
     def test_cooldown_blocks_rapid_second_trigger(self):
-        bov = BovTrigger()
-        bov.update(80, 3200, 22, 0)
-        bov.update(4,  3100, 24, 100)   # BOV #1 at t=100ms
-        bov.update(80, 2800, 28, 200)   # back on throttle
-        triggered = bov.update(4, 2700, 30, 300)  # within 2s cooldown
+        turbo = TurboTrigger()
+        turbo.update(80, 3200, 22, 0)
+        turbo.update(4,  3100, 24, 100)   # Turbo #1 at t=100ms
+        turbo.update(80, 2800, 28, 200)   # back on throttle
+        triggered = turbo.update(4, 2700, 30, 300)  # within 2s cooldown
         assert not triggered
-        assert bov.count == 1
+        assert turbo.count == 1
 
     def test_cooldown_allows_trigger_after_expiry(self):
-        bov = BovTrigger()
-        bov.update(80, 3200, 22, 0)
-        bov.update(4,  3100, 24, 100)    # BOV #1
-        bov.update(80, 2800, 28, 200)
-        bov.update(4,  2700, 30, 300)    # blocked by cooldown
-        bov.update(80, 3100, 35, 2200)   # after cooldown
-        triggered = bov.update(4, 3000, 37, 2300)  # BOV #2
+        turbo = TurboTrigger()
+        turbo.update(80, 3200, 22, 0)
+        turbo.update(4,  3100, 24, 100)    # Turbo #1
+        turbo.update(80, 2800, 28, 200)
+        turbo.update(4,  2700, 30, 300)    # blocked by cooldown
+        turbo.update(80, 3100, 35, 2200)   # after cooldown
+        triggered = turbo.update(4, 3000, 37, 2300)  # Turbo #2
         assert triggered
-        assert bov.count == 2
+        assert turbo.count == 2
 
     def test_custom_thresholds(self):
         # More sensitive: lower throttle_high=25%, lower rpm_min=1000
         # Speed=8 km/h → RPM/speed ratio=150 → gear 1 (within max_gear=2)
-        bov = BovTrigger(throttle_high=25, rpm_min=1000)
-        bov.update(30, 1200, 8, 0)
-        triggered = bov.update(4, 1100, 8, 100)
+        turbo = TurboTrigger(throttle_high=25, rpm_min=1000)
+        turbo.update(30, 1200, 8, 0)
+        triggered = turbo.update(4, 1100, 8, 100)
         assert triggered
 
     def test_event_log_recorded(self):
-        bov = BovTrigger()
-        bov.update(80, 3200, 22, 0)
-        bov.update(4,  3100, 24, 100)
-        assert len(bov.events) == 1
-        event = bov.events[0]
+        turbo = TurboTrigger()
+        turbo.update(80, 3200, 22, 0)
+        turbo.update(4,  3100, 24, 100)
+        assert len(turbo.events) == 1
+        event = turbo.events[0]
         assert event["gear"] == 1
         assert event["prev_tps"] == 80
         assert event["tps"] == 4
 
 
 # ── Scenario-level tests ─────────────────────────────────────────────────
-# Replay each scenario and assert the expected number of BOV triggers.
+# Replay each scenario and assert the expected number of Turbo triggers.
 
 class TestScenarios:
 
     @pytest.mark.parametrize("name", list(SCENARIOS.keys()))
-    def test_scenario_bov_count(self, name):
-        """Replay a scenario and check the BOV trigger count matches expectation."""
+    def test_scenario_turbo_count(self, name):
+        """Replay a scenario and check the Turbo trigger count matches expectation."""
         scenario   = SCENARIOS[name]
-        expected   = EXPECTED_BOV_COUNTS[name]
-        bov        = BovTrigger()
+        expected   = EXPECTED_TURBO_COUNTS[name]
+        turbo        = TurboTrigger()
 
         for (time_ms, tps, rpm, speed) in scenario:
-            bov.update(tps, rpm, speed, time_ms)
+            turbo.update(tps, rpm, speed, time_ms)
 
-        assert bov.count == expected, (
-            f"Scenario '{name}': expected {expected} BOV trigger(s), "
-            f"got {bov.count}. Events: {bov.events}"
+        assert turbo.count == expected, (
+            f"Scenario '{name}': expected {expected} Turbo trigger(s), "
+            f"got {turbo.count}. Events: {turbo.events}"
         )

@@ -40,11 +40,11 @@
       "attrs": { "value": "1000" }
     },
     {
-      "type": "wokwi-buzzer",
-      "id": "buz",
+      "type": "wokwi-led",
+      "id": "led",
       "top": 60,
       "left": 472.2,
-      "attrs": { "volume": "0.5" }
+      "attrs": { "color": "red" }
     }
   ],
   "connections": [
@@ -62,9 +62,10 @@
     ["enc:DT", "esp:D26", "purple", []],
     ["enc:SW", "esp:D27", "yellow", []],
     ["esp:TX2", "r1:2", "cyan", []],
-    ["r1:1", "buz:2", "red", ["h134.4", "v-9.6"]],
-    ["buz:1", "esp:GND.1", "black", ["v57.6", "h-316.9"]],
-    ["enc:VCC", "esp:3V3", "red", ["h201.6", "v38.8"]]
+    ["r1:1", "led:A", "red", []],
+    ["led:K", "esp:GND.2", "black", []],
+    ["enc:VCC", "esp:3V3", "red", ["h201.6", "v38.8"]],
+    ["led:C", "esp:GND.1", "black", ["v0"]]
   ],
   "dependencies": {}
 }

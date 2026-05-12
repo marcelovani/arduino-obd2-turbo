@@ -30,7 +30,7 @@ void showStatus(const char* status) {
   display.drawStr(0, 28, volBuf);
   display.drawStr(0, 44, status);
   display.setFont(u8g2_font_ncenB06_tr);
-  display.drawStr(0, 60, "Click = play BOV sound");
+  display.drawStr(0, 60, "Click = play Turbo sound");
   display.sendBuffer();
 }
 

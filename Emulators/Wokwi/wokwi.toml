@@ -1,4 +1,4 @@
 [wokwi]
 version = 1
-firmware = "Emulators/Wokwi/build/sketch.ino.bin"
-elf     = "Emulators/Wokwi/build/sketch.ino.elf"
+firmware = "build/Wokwi.ino.bin"
+elf     = "build/Wokwi.ino.elf"

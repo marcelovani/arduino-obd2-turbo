@@ -3,11 +3,11 @@
 At the start of every session, read these two files before doing anything else:
 
 - [README.md](README.md) — project overview, hardware list, and build phases
-- [esp32_obd2_dashboard_plan.md](esp32_obd2_dashboard_plan.md) — full technical plan: wiring, BOV trigger algorithm, OBD2 protocol, state machine, code skeleton, all decisions made, and references
+- [esp32_obd2_dashboard_plan.md](esp32_obd2_dashboard_plan.md) — full technical plan: wiring, Turbo trigger algorithm, OBD2 protocol, state machine, code skeleton, all decisions made, and references
 
 ## Project summary
 
-This is an Arduino/ESP32 project that emulates a turbo blow-off valve (BOV)
+This is an Arduino/ESP32 project that emulates a turbo blow-off valve (Turbo)
 sound. It reads live OBD2 data (throttle, RPM, speed) via Bluetooth from an
 ELM327 dongle and plays a "pssssh" MP3 sound through a DFPlayer Mini when
 the driver lifts off the throttle during a gear change.
@@ -23,10 +23,10 @@ Target car: Mercedes CLA180, 2011, gasoline, manual gearbox.
 - Libraries: U8g2 (not U8glib), DFRobotDFPlayerMini, Bounce2
 - ELM327 is Bluetooth Classic only (not WiFi, not BLE)
 - G-force displayed relative to 1g (gravity subtracted)
-- Gearbox is manual — BOV trigger uses throttle-drop detection (no clutch PID needed)
+- Gearbox is manual — Turbo trigger uses throttle-drop detection (no clutch PID needed)
 - Speaker via DFPlayer Mini's built-in 3W amp (SPK1/SPK2 pins)
 - Future upgrade: Bluetooth audio to car radio via separate A2DP transmitter module (ESP32 BT is occupied by OBD2)
-- BOV triggers on throttle drop: >40% → <10%, RPM >1500, gear ≤ 2
+- Turbo triggers on throttle drop: >40% → <10%, RPM >1500, gear ≤ 2
 
 ## Coding conventions
 

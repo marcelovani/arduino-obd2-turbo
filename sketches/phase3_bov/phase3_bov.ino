@@ -1,8 +1,8 @@
-// Phase 3 — BOV trigger (core feature)
-// Connects to ELM327, reads throttle + RPM, and fires the BOV sound via
+// Phase 3 — Turbo trigger (core feature)
+// Connects to ELM327, reads throttle + RPM, and fires the Turbo sound via
 // DFPlayer Mini whenever the driver lifts off the throttle during a gear change.
 //
-// Tune the BOV_* constants after your first real-car test.
+// Tune the TURBO_* constants after your first real-car test.
 //
 // Libraries needed: U8g2, DFRobotDFPlayerMini
 // Built-in: BluetoothSerial
@@ -16,12 +16,12 @@
 #define PIN_DFP_RX 16   // ESP32 RX2 ← DFPlayer TX
 #define PIN_DFP_TX 17   // ESP32 TX2 → DFPlayer RX (via 1kΩ resistor)
 
-// ── BOV thresholds — tune after first car test ────────────────────────────
-#define BOV_THROTTLE_HIGH  40.0f   // TPS must have been above this (accelerating)
-#define BOV_THROTTLE_LOW   10.0f   // TPS must now be below this (lifted off)
-#define BOV_RPM_MIN        1500.0f // must be in boost range
-#define BOV_MAX_GEAR       2       // only trigger in 1st and 2nd gear
-#define BOV_COOLDOWN_MS    2000    // min ms between BOV sounds
+// ── Turbo thresholds — tune after first car test ────────────────────────────
+#define TURBO_THROTTLE_HIGH  40.0f   // TPS must have been aturboe this (accelerating)
+#define TURBO_THROTTLE_LOW   10.0f   // TPS must now be below this (lifted off)
+#define TURBO_RPM_MIN        1500.0f // must be in boost range
+#define TURBO_MAX_GEAR       2       // only trigger in 1st and 2nd gear
+#define TURBO_COOLDOWN_MS    2000    // min ms between Turbo sounds
 
 // ── Objects ───────────────────────────────────────────────────────────────
 BluetoothSerial BT;
@@ -31,8 +31,8 @@ DFRobotDFPlayerMini dfplayer;
 // ── State ─────────────────────────────────────────────────────────────────
 String   targetName  = "";
 float    prevTPS     = 0;
-uint32_t lastBovMs   = 0;
-uint32_t bovCount    = 0;
+uint32_t lastTurboMs   = 0;
+uint32_t turboCount    = 0;
 
 // ── OBD2 helpers ─────────────────────────────────────────────────────────
 
@@ -77,23 +77,23 @@ int estimateGear(float rpm, float speedKmh) {
   return 6;
 }
 
-// ── BOV trigger ───────────────────────────────────────────────────────────
-void checkBov(float tps, float rpm, float speed) {
+// ── Turbo trigger ───────────────────────────────────────────────────────────
+void checkTurbo(float tps, float rpm, float speed) {
   uint32_t now = millis();
   int gear = estimateGear(rpm, speed);
 
-  if (now - lastBovMs >= BOV_COOLDOWN_MS &&
-      prevTPS   > BOV_THROTTLE_HIGH &&
-      tps       < BOV_THROTTLE_LOW  &&
-      rpm       > BOV_RPM_MIN       &&
+  if (now - lastTurboMs >= TURBO_COOLDOWN_MS &&
+      prevTPS   > TURBO_THROTTLE_HIGH &&
+      tps       < TURBO_THROTTLE_LOW  &&
+      rpm       > TURBO_RPM_MIN       &&
       gear      > 0                 &&
-      gear     <= BOV_MAX_GEAR) {
+      gear     <= TURBO_MAX_GEAR) {
 
     dfplayer.play(1);
-    lastBovMs = now;
-    bovCount++;
-    Serial.printf("BOV! TPS %.0f→%.0f%% RPM %.0f Gear %d (total: %lu)\n",
-                  prevTPS, tps, rpm, gear, bovCount);
+    lastTurboMs = now;
+    turboCount++;
+    Serial.printf("Turbo! TPS %.0f→%.0f%% RPM %.0f Gear %d (total: %lu)\n",
+                  prevTPS, tps, rpm, gear, turboCount);
   }
   prevTPS = tps;
 }
@@ -112,7 +112,7 @@ void showMessage(const char* line1, const char* line2 = nullptr) {
 
 void showRunning(float tps, float speed, float rpm) {
   int gear = estimateGear(rpm, speed);
-  bool bovRecent = (millis() - lastBovMs < 1000);
+  bool turboRecent = (millis() - lastTurboMs < 1000);
 
   char buf[24];
   display.clearBuffer();
@@ -127,13 +127,13 @@ void showRunning(float tps, float speed, float rpm) {
   snprintf(buf, sizeof(buf), "RPM: %.0f", rpm >= 0 ? rpm : 0.0f);
   display.drawStr(0, 42, buf);
 
-  if (bovRecent) {
+  if (turboRecent) {
     display.setFont(u8g2_font_ncenB10_tr);
-    snprintf(buf, sizeof(buf), "PSSSSH! #%lu", bovCount);
+    snprintf(buf, sizeof(buf), "PSSSSH! #%lu", turboCount);
     display.drawStr(0, 60, buf);
   } else {
     display.setFont(u8g2_font_ncenB06_tr);
-    snprintf(buf, sizeof(buf), "BOV count: %lu", bovCount);
+    snprintf(buf, sizeof(buf), "Turbo count: %lu", turboCount);
     display.drawStr(0, 60, buf);
   }
 
@@ -196,7 +196,7 @@ void setup() {
   display.begin();
   BT.begin("ESP32-OBD", true);
 
-  showMessage("OBD2 Turbo", "BOV Mode");
+  showMessage("OBD2 Turbo", "Turbo Mode");
   delay(1000);
 
   if (dfplayer.begin(Serial2)) {
@@ -229,7 +229,7 @@ void loop() {
     if (speed < 0) speed = 0;
     if (rpm < 0) rpm = 0;
 
-    checkBov(tps, rpm, speed);
+    checkTurbo(tps, rpm, speed);
     lastPollMs = now;
   }
 

@@ -4,7 +4,7 @@ Visual scenario monitor — terminal simulation of the OLED display.
 Shows a driving scenario playing in real time with:
   - Simulated OLED panel with current values
   - Progress bar through the scenario
-  - BOV trigger events highlighted in yellow
+  - Turbo trigger events highlighted in yellow
   - Parameter tuning via command-line flags
 
 Usage:
@@ -12,7 +12,7 @@ Usage:
     python tests/visual_monitor.py first_gear_change   # run one scenario
     python tests/visual_monitor.py --list              # list available scenarios
 
-Tuning BOV thresholds:
+Tuning Turbo thresholds:
     python tests/visual_monitor.py --throttle-high 35 --rpm-min 1200
 
 Run via Makefile:
@@ -37,8 +37,8 @@ from rich.progress  import Progress, BarColumn, TextColumn, TimeElapsedColumn
 from rich.text      import Text
 from rich           import box
 
-from obd_logic            import BovTrigger, estimate_gear
-from scenarios.definitions import SCENARIOS, EXPECTED_BOV_COUNTS
+from obd_logic            import TurboTrigger, estimate_gear
+from scenarios.definitions import SCENARIOS, EXPECTED_TURBO_COUNTS
 
 console = Console()
 
@@ -46,14 +46,14 @@ console = Console()
 # ── OLED simulation ───────────────────────────────────────────────────────
 
 def make_oled_panel(tps: float, speed: float, rpm: float, gear: int,
-                    bov_recent: bool, bov_count: int) -> Panel:
+                    turbo_recent: bool, turbo_count: int) -> Panel:
     """Render a fake OLED display as a Rich panel."""
     lines = Text()
 
-    if bov_recent:
-        lines.append(f"  *** PSSSSH! #{bov_count} ***\n", style="bold yellow on black")
+    if turbo_recent:
+        lines.append(f"  *** PSSSSH! #{turbo_count} ***\n", style="bold yellow on black")
     else:
-        lines.append(f"  BOV count: {bov_count}\n", style="dim white on black")
+        lines.append(f"  Turbo count: {turbo_count}\n", style="dim white on black")
 
     lines.append(f"  TPS:  {tps:5.0f}%   G:{gear}\n", style="bold green on black")
     lines.append(f"  SPD:  {speed:5.0f} km/h\n",       style="bold cyan on black")
@@ -70,35 +70,35 @@ def make_oled_panel(tps: float, speed: float, rpm: float, gear: int,
 
 
 def make_data_table(tps: float, speed: float, rpm: float, gear: int,
-                    prev_tps: float, bov: BovTrigger) -> Table:
+                    prev_tps: float, turbo: TurboTrigger) -> Table:
     """Render a live data table alongside the OLED panel."""
     t = Table(box=box.SIMPLE, show_header=True, header_style="bold blue")
     t.add_column("Parameter", style="cyan",  width=16)
     t.add_column("Value",     style="white", width=14)
     t.add_column("Threshold", style="dim",   width=14)
 
-    tps_style   = "bold yellow" if tps   < bov.throttle_low else "green"
-    rpm_style   = "bold green"  if rpm   > bov.rpm_min      else "red"
-    gear_style  = "bold green"  if 0 < gear <= bov.max_gear else "dim white"
-    prev_style  = "bold green"  if prev_tps > bov.throttle_high else "dim white"
+    tps_style   = "bold yellow" if tps   < turbo.throttle_low else "green"
+    rpm_style   = "bold green"  if rpm   > turbo.rpm_min      else "red"
+    gear_style  = "bold green"  if 0 < gear <= turbo.max_gear else "dim white"
+    prev_style  = "bold green"  if prev_tps > turbo.throttle_high else "dim white"
 
     t.add_row("Throttle (now)",  f"[{tps_style}]{tps:6.1f} %[/]",
-              f"> {bov.throttle_low:.0f}% = lifted")
+              f"> {turbo.throttle_low:.0f}% = lifted")
     t.add_row("Throttle (prev)", f"[{prev_style}]{prev_tps:6.1f} %[/]",
-              f"> {bov.throttle_high:.0f}% = was floored")
+              f"> {turbo.throttle_high:.0f}% = was floored")
     t.add_row("RPM",             f"[{rpm_style}]{rpm:6.0f}[/]",
-              f"> {bov.rpm_min:.0f} = in boost")
+              f"> {turbo.rpm_min:.0f} = in boost")
     t.add_row("Speed",           f"{speed:6.0f} km/h", "")
     t.add_row("Gear",            f"[{gear_style}]{gear}[/]",
-              f"<= {bov.max_gear} = triggers BOV")
+              f"<= {turbo.max_gear} = triggers Turbo")
 
     return t
 
 
 def make_event_log(events: list[dict], last_n: int = 4) -> Panel:
-    """Show the last N BOV trigger events."""
+    """Show the last N Turbo trigger events."""
     if not events:
-        return Panel("[dim]No BOV events yet[/dim]", title="BOV Events",
+        return Panel("[dim]No Turbo events yet[/dim]", title="Turbo Events",
                      border_style="yellow")
     lines = Text()
     for e in events[-last_n:]:
@@ -107,39 +107,39 @@ def make_event_log(events: list[dict], last_n: int = 4) -> Panel:
             f"  RPM {e['rpm']:.0f}  Gear {e['gear']}\n",
             style="yellow"
         )
-    return Panel(lines, title=f"[yellow]BOV Events ({len(events)} total)[/yellow]",
+    return Panel(lines, title=f"[yellow]Turbo Events ({len(events)} total)[/yellow]",
                  border_style="yellow")
 
 
 # ── Scenario runner ───────────────────────────────────────────────────────
 
-def run_scenario(name: str, bov: BovTrigger, speed_factor: float = 1.0):
+def run_scenario(name: str, turbo: TurboTrigger, speed_factor: float = 1.0):
     """Replay a scenario in real time with live terminal output."""
     scenario  = SCENARIOS[name]
-    expected  = EXPECTED_BOV_COUNTS.get(name, "?")
+    expected  = EXPECTED_TURBO_COUNTS.get(name, "?")
     last_t    = scenario[-1][0]
-    bov_recent_until = 0.0
+    turbo_recent_until = 0.0
 
     console.print(f"\n[bold cyan]Scenario:[/bold cyan] {name}  "
-                  f"[dim]Expected BOV count: {expected}[/dim]")
-    console.print(f"[dim]Thresholds: TPS_HIGH={bov.throttle_high}%  "
-                  f"TPS_LOW={bov.throttle_low}%  "
-                  f"RPM_MIN={bov.rpm_min:.0f}  "
-                  f"MAX_GEAR={bov.max_gear}  "
-                  f"COOLDOWN={bov.cooldown_ms}ms[/dim]\n")
+                  f"[dim]Expected Turbo count: {expected}[/dim]")
+    console.print(f"[dim]Thresholds: TPS_HIGH={turbo.throttle_high}%  "
+                  f"TPS_LOW={turbo.throttle_low}%  "
+                  f"RPM_MIN={turbo.rpm_min:.0f}  "
+                  f"MAX_GEAR={turbo.max_gear}  "
+                  f"COOLDOWN={turbo.cooldown_ms}ms[/dim]\n")
 
     prev_tps = 0.0
 
     with Live(console=console, refresh_per_second=20) as live:
         for i, (t_ms, tps, rpm, speed) in enumerate(scenario):
 
-            triggered = bov.update(tps, rpm, speed, t_ms)
+            triggered = turbo.update(tps, rpm, speed, t_ms)
             if triggered:
-                bov_recent_until = time.time() + 0.8
+                turbo_recent_until = time.time() + 0.8
 
             gear       = estimate_gear(rpm, speed)
-            bov_recent = time.time() < bov_recent_until
-            prev_tps_val = bov._prev_tps if not triggered else tps  # after update
+            turbo_recent = time.time() < turbo_recent_until
+            prev_tps_val = turbo._prev_tps if not triggered else tps  # after update
 
             # Progress through scenario
             pct   = int(100 * t_ms / max(last_t, 1))
@@ -148,15 +148,15 @@ def run_scenario(name: str, bov: BovTrigger, speed_factor: float = 1.0):
 
             layout = Table.grid(padding=1)
             layout.add_row(
-                make_oled_panel(tps, speed, rpm, gear, bov_recent, bov.count),
-                make_data_table(tps, speed, rpm, gear, prev_tps, bov),
+                make_oled_panel(tps, speed, rpm, gear, turbo_recent, turbo.count),
+                make_data_table(tps, speed, rpm, gear, prev_tps, turbo),
             )
 
             from rich.console import Group
             live.update(Group(
                 Text(progress_line),
                 layout,
-                make_event_log(bov.events),
+                make_event_log(turbo.events),
             ))
 
             prev_tps = tps
@@ -168,8 +168,8 @@ def run_scenario(name: str, bov: BovTrigger, speed_factor: float = 1.0):
                 time.sleep(wait_ms / 1000)
 
     # Final summary
-    result_style = "bold green" if bov.count == expected else "bold red"
-    console.print(f"\n[{result_style}]Result: {bov.count} BOV trigger(s) "
+    result_style = "bold green" if turbo.count == expected else "bold red"
+    console.print(f"\n[{result_style}]Result: {turbo.count} Turbo trigger(s) "
                   f"(expected {expected})[/]\n")
 
 
@@ -177,7 +177,7 @@ def run_scenario(name: str, bov: BovTrigger, speed_factor: float = 1.0):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Visual BOV scenario monitor — simulates driving on terminal"
+        description="Visual Turbo scenario monitor — simulates driving on terminal"
     )
     parser.add_argument(
         "scenario", nargs="?", default=None,
@@ -187,27 +187,27 @@ def main():
     parser.add_argument("--speed",   type=float, default=1.0,
                         help="Playback speed multiplier (default 1.0, try 0.5 for slow-mo)")
 
-    # Tunable BOV thresholds
+    # Tunable Turbo thresholds
     parser.add_argument("--throttle-high", type=float, default=None,
-                        help=f"Override BOV_THROTTLE_HIGH (default 40%%)")
+                        help=f"Override TURBO_THROTTLE_HIGH (default 40%%)")
     parser.add_argument("--throttle-low",  type=float, default=None,
-                        help=f"Override BOV_THROTTLE_LOW (default 10%%)")
+                        help=f"Override TURBO_THROTTLE_LOW (default 10%%)")
     parser.add_argument("--rpm-min",       type=float, default=None,
-                        help=f"Override BOV_RPM_MIN (default 1500)")
+                        help=f"Override TURBO_RPM_MIN (default 1500)")
     parser.add_argument("--max-gear",      type=int,   default=None,
-                        help=f"Override BOV_MAX_GEAR (default 2)")
+                        help=f"Override TURBO_MAX_GEAR (default 2)")
     parser.add_argument("--cooldown",      type=float, default=None,
-                        help=f"Override BOV_COOLDOWN_MS (default 2000)")
+                        help=f"Override TURBO_COOLDOWN_MS (default 2000)")
 
     args = parser.parse_args()
 
     if args.list:
         console.print("\n[bold]Available scenarios:[/bold]")
-        for name, expected in EXPECTED_BOV_COUNTS.items():
-            console.print(f"  {name:<35} expected BOV: {expected}")
+        for name, expected in EXPECTED_TURBO_COUNTS.items():
+            console.print(f"  {name:<35} expected Turbo: {expected}")
         return
 
-    # Build BovTrigger with any overrides
+    # Build TurboTrigger with any overrides
     kwargs = {}
     if args.throttle_high is not None: kwargs["throttle_high"] = args.throttle_high
     if args.throttle_low  is not None: kwargs["throttle_low"]  = args.throttle_low
@@ -222,7 +222,7 @@ def main():
             console.print(f"[red]Unknown scenario: {name}[/red]")
             console.print("Use --list to see available scenarios.")
             sys.exit(1)
-        run_scenario(name, BovTrigger(**kwargs), speed_factor=args.speed)
+        run_scenario(name, TurboTrigger(**kwargs), speed_factor=args.speed)
         if len(names) > 1:
             time.sleep(0.5)
 

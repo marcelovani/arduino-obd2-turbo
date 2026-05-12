@@ -1,17 +1,17 @@
-// Wokwi simulation — OBD2 Turbo BOV Emulator
+// Wokwi simulation — OBD2 Turbo Sound Emulator
 //
 // No Bluetooth / ELM327 in this simulation. OBD2 data is replayed from a
 // built-in driving scenario that loops automatically and demonstrates two
-// BOV triggers (1st→2nd and 2nd→3rd gear changes) followed by cruising.
+// Turbo triggers (1st→2nd and 2nd→3rd gear changes) followed by cruising.
 //
 // Hardware wired in the diagram:
 //   SSD1306 OLED  — I2C (SDA=GPIO21, SCL=GPIO22)
 //   MPU6050 IMU   — I2C (SDA=GPIO21, SCL=GPIO22)
 //   KY-040 encoder — CLK=GPIO25, DT=GPIO26, SW=GPIO27
-//   Buzzer (DFPlayer placeholder) — GPIO17 via 1 kΩ resistor
+//   LED (DFPlayer placeholder) — GPIO17 via 1 kΩ resistor
 //
 // Rotate encoder → cycle display views.
-// Push encoder button → reset BOV counter.
+// Push encoder button → reset Turbo counter.
 //
 // Libraries: U8g2, Adafruit MPU6050, Adafruit Unified Sensor, Bounce2
 
@@ -25,14 +25,14 @@
 #define PIN_ENC_CLK  25
 #define PIN_ENC_DT   26
 #define PIN_ENC_SW   27
-#define PIN_BUZZER   17   // DFPlayer TX placeholder — buzzer gives audible feedback
+#define PIN_LED      17   // DFPlayer TX placeholder — LED lights while MP3 would play
 
-// ── BOV thresholds (mirror constants in phase3_bov.ino / obd_logic.py) ───
-#define BOV_THROTTLE_HIGH  40.0f
-#define BOV_THROTTLE_LOW   10.0f
-#define BOV_RPM_MIN        1500.0f
-#define BOV_MAX_GEAR       2
-#define BOV_COOLDOWN_MS    2000
+// ── Turbo thresholds (mirror constants in phase3_turbo.ino / obd_logic.py) ───
+#define TURBO_THROTTLE_HIGH  40.0f
+#define TURBO_THROTTLE_LOW   10.0f
+#define TURBO_RPM_MIN        1500.0f
+#define TURBO_MAX_GEAR       2
+#define TURBO_COOLDOWN_MS    2000
 
 // ── Objects ───────────────────────────────────────────────────────────────
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C display(U8G2_R0, U8X8_PIN_NONE);
@@ -48,9 +48,10 @@ float    metricTPS    = 0;
 float    metricSpeed  = 0;
 float    metricRPM    = 0;
 float    prevTPS      = 0;
-uint32_t lastBovMs    = 0;
-uint32_t bovCount     = 0;
-uint32_t bovUntilMs   = 0;    // show "PSSSSH!" on OLED until this time
+uint32_t lastTurboMs    = 0;
+uint32_t turboCount     = 0;
+uint32_t turboUntilMs   = 0;    // show "PSSSSH!" on OLED until this time
+uint32_t turboSoundUntilMs = 0; // filled circle indicator while sound plays
 
 // ── Gear estimation ───────────────────────────────────────────────────────
 // RPM / speed ratio thresholds tuned for a typical small European petrol car.
@@ -67,7 +68,7 @@ int estimateGear(float rpm, float speed) {
 
 // ── Driving scenario ──────────────────────────────────────────────────────
 // {time_ms, tps%, rpm, speed_kmh}
-// Two BOV triggers expected: at ~2800ms and ~5000ms.
+// Two Turbo triggers expected: at ~2800ms and ~5000ms.
 struct DataPoint { uint32_t t; float tps; float rpm; float speed; };
 
 static const DataPoint SCENARIO[] = {
@@ -75,14 +76,14 @@ static const DataPoint SCENARIO[] = {
   {  800, 30,  1500, 10  },  // pulling away in 1st
   { 1500, 75,  2800, 20  },  // accelerating hard
   { 2200, 85,  3300, 26  },  // near red-line 1st gear
-  { 2800,  4,  3200, 28  },  // *** BOV #1 *** (1st→2nd, TPS drops, RPM 3200)
+  { 2800,  4,  3200, 28  },  // *** Turbo #1 *** (1st→2nd, TPS drops, RPM 3200)
   { 3000, 55,  2400, 33  },  // back on throttle in 2nd
   { 3600, 80,  3100, 42  },  // hard acceleration in 2nd
   { 4300, 85,  3500, 46  },  // near red-line 2nd gear
-  { 5000,  4,  3300, 48  },  // *** BOV #2 *** (2nd→3rd, 2200ms after BOV#1)
+  { 5000,  4,  3300, 48  },  // *** Turbo #2 *** (2nd→3rd, 2200ms after Turbo#1)
   { 5200, 45,  2200, 55  },  // into 3rd, steady throttle
-  { 6000, 60,  2700, 62  },  // cruising 3rd — ratio ~44, gear 3: no BOV
-  { 7000,  3,  2500, 65  },  // lift in 3rd — no BOV (gear > max_gear)
+  { 6000, 60,  2700, 62  },  // cruising 3rd — ratio ~44, gear 3: no Turbo
+  { 7000,  3,  2500, 65  },  // lift in 3rd — no Turbo (gear > max_gear)
   { 8000,  0,  1000, 30  },  // braking
   { 9000,  0,   800,  0  },  // back to idle — loop restarts
 };
@@ -119,20 +120,20 @@ void advanceScenario() {
   metricSpeed = SCENARIO[scenIdx].speed + frac * (SCENARIO[scenIdx+1].speed - SCENARIO[scenIdx].speed);
 }
 
-// ── BOV trigger check ────────────────────────────────────────────────────
-void checkBov(uint32_t now) {
+// ── Turbo trigger check ────────────────────────────────────────────────────
+void checkTurbo(uint32_t now) {
   int gear = estimateGear(metricRPM, metricSpeed);
-  if (prevTPS          > BOV_THROTTLE_HIGH  &&
-      metricTPS        < BOV_THROTTLE_LOW   &&
-      metricRPM        > BOV_RPM_MIN        &&
-      gear            <= BOV_MAX_GEAR       &&
-      now - lastBovMs  > BOV_COOLDOWN_MS) {
-    bovCount++;
-    lastBovMs  = now;
-    bovUntilMs = now + 800;
-    tone(PIN_BUZZER, 900, 350);
-    Serial.printf("[BOV] #%lu  gear=%d  TPS %.0f→%.0f  RPM %.0f\n",
-                  bovCount, gear, prevTPS, metricTPS, metricRPM);
+  if (prevTPS          > TURBO_THROTTLE_HIGH  &&
+      metricTPS        < TURBO_THROTTLE_LOW   &&
+      metricRPM        > TURBO_RPM_MIN        &&
+      gear            <= TURBO_MAX_GEAR       &&
+      now - lastTurboMs  > TURBO_COOLDOWN_MS) {
+    turboCount++;
+    lastTurboMs       = now;
+    turboUntilMs      = now + 800;
+    turboSoundUntilMs = now + 1000; // blink for 1 s; real sketch uses DFPlayer BUSY pin
+    Serial.printf("[Turbo] #%lu  gear=%d  TPS %.0f→%.0f  RPM %.0f\n",
+                  turboCount, gear, prevTPS, metricTPS, metricRPM);
   }
   prevTPS = metricTPS;
 }
@@ -141,9 +142,9 @@ void checkBov(uint32_t now) {
 void readEncoder() {
   encBtn.update();
   if (encBtn.fell()) {
-    bovCount  = 0;
-    lastBovMs = 0;
-    Serial.println("[ENC] BOV counter reset");
+    turboCount  = 0;
+    lastTurboMs = 0;
+    Serial.println("[ENC] Turbo counter reset");
   }
   int clk = digitalRead(PIN_ENC_CLK);
   if (clk != lastClk && clk == LOW) {
@@ -167,21 +168,21 @@ void readIMU() {
 // ── OLED rendering ───────────────────────────────────────────────────────
 void drawDisplay() {
   int gear = estimateGear(metricRPM, metricSpeed);
-  bool bovRecent = (millis() < bovUntilMs);
+  bool turboRecent = (millis() < turboUntilMs);
 
   display.clearBuffer();
 
-  if (bovRecent) {
-    // Big BOV flash — override top line
+  if (turboRecent) {
+    // Big Turbo flash — override top line
     display.setFont(u8g2_font_ncenB10_tr);
-    char bov[20];
-    snprintf(bov, sizeof(bov), "** PSSSSH! #%lu **", bovCount);
-    display.drawStr(0, 12, bov);
+    char turbo[20];
+    snprintf(turbo, sizeof(turbo), "** PSSSSH! #%lu **", turboCount);
+    display.drawStr(0, 12, turbo);
     display.setFont(u8g2_font_5x7_tr);
   } else {
     display.setFont(u8g2_font_5x7_tr);
     char hdr[24];
-    snprintf(hdr, sizeof(hdr), "BOV:%lu  G:%+.1f  [%d]", bovCount, gforce, currentView + 1);
+    snprintf(hdr, sizeof(hdr), "Turbo:%lu  G:%+.1f  [%d]", turboCount, gforce, currentView + 1);
     display.drawStr(0, 8, hdr);
   }
 
@@ -223,8 +224,15 @@ void drawDisplay() {
     display.drawStr(0, 40, line);
     snprintf(line, sizeof(line), "Gear: %d    G:%+.2f", gear, gforce);
     display.drawStr(0, 50, line);
-    snprintf(line, sizeof(line), "BOV:  %lu", bovCount);
+    snprintf(line, sizeof(line), "Turbo:  %lu", turboCount);
     display.drawStr(0, 60, line);
+  }
+
+  // Playing indicator: filled circle top-right while sound is active
+  if (millis() < turboSoundUntilMs) {
+    display.drawDisc(124, 4, 3);
+  } else {
+    display.drawCircle(124, 4, 3);
   }
 
   display.sendBuffer();
@@ -233,14 +241,14 @@ void drawDisplay() {
 // ── Setup ─────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
-  Serial.println("\n=== BOV Emulator (Wokwi simulation) ===");
+  Serial.println("\n=== Turbo Emulator (Wokwi simulation) ===");
   Serial.println("Rotate encoder to cycle views.");
-  Serial.println("Push encoder button to reset BOV counter.\n");
+  Serial.println("Push encoder button to reset Turbo counter.\n");
 
   display.begin();
   display.setFont(u8g2_font_5x7_tr);
   display.clearBuffer();
-  display.drawStr(0, 20, "BOV Emulator");
+  display.drawStr(0, 20, "Turbo Emulator");
   display.drawStr(0, 32, "Wokwi simulation");
   display.drawStr(0, 44, "Starting...");
   display.sendBuffer();
@@ -259,8 +267,8 @@ void setup() {
   encBtn.interval(10);
   lastClk = digitalRead(PIN_ENC_CLK);
 
-  pinMode(PIN_BUZZER, OUTPUT);
-  digitalWrite(PIN_BUZZER, LOW);
+  pinMode(PIN_LED, OUTPUT);
+  digitalWrite(PIN_LED, LOW);
 
   delay(800);
   scenStart = millis();
@@ -273,7 +281,12 @@ void loop() {
   readEncoder();
   readIMU();
   advanceScenario();
-  checkBov(now);
+  checkTurbo(now);
+  if (now < turboSoundUntilMs) {
+    digitalWrite(PIN_LED, (now / 100) % 2 == 0 ? HIGH : LOW); // blink ~5 Hz
+  } else {
+    digitalWrite(PIN_LED, LOW);
+  }
   drawDisplay();
 
   delay(50);  // ~20 Hz

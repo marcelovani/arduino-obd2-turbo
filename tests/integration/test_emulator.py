@@ -20,7 +20,7 @@ import time
 import threading
 from mock_elm327 import MockElm327Server
 from elm_client   import ElmClient
-from obd_logic    import parse_pid, BovTrigger
+from obd_logic    import parse_pid, TurboTrigger
 
 
 PORT = 35001  # different port from the default to avoid conflicts
@@ -128,23 +128,23 @@ class TestPidPolling:
         assert 73.0 < result < 77.0
 
 
-# ── End-to-end: BOV trigger via emulator ──────────────────────────────────
+# ── End-to-end: Turbo trigger via emulator ──────────────────────────────────
 
-class TestBovViaEmulator:
+class TestTurboViaEmulator:
     """
-    Simulate a gear change over the mock server and verify the BOV
+    Simulate a gear change over the mock server and verify the Turbo
     trigger logic fires correctly at the right moment.
     """
 
-    def test_bov_fires_on_gear_change(self, elm_server, client):
-        bov = BovTrigger()
+    def test_turbo_fires_on_gear_change(self, elm_server, client):
+        turbo = TurboTrigger()
 
         # Step through a first-gear acceleration + lift-off
         steps = [
             (0,   0,   800,  0),    # idle
             (100, 70, 3000, 20),    # hard acceleration in 1st
             (200, 80, 3500, 25),    # still pressing
-            (300,  4, 3300, 28),    # lift off → BOV expected
+            (300,  4, 3300, 28),    # lift off → Turbo expected
         ]
 
         for (t, tps, rpm, speed) in steps:
@@ -158,23 +158,23 @@ class TestBovViaEmulator:
             parsed_speed = parse_pid(r_speed, 1, 1.0)
             parsed_rpm   = parse_pid(r_rpm,   2, 0.25)
 
-            bov.update(parsed_tps, parsed_rpm, parsed_speed, t)
+            turbo.update(parsed_tps, parsed_rpm, parsed_speed, t)
 
-        assert bov.count == 1, f"Expected 1 BOV trigger, got {bov.count}"
+        assert turbo.count == 1, f"Expected 1 Turbo trigger, got {turbo.count}"
 
-    def test_bov_does_not_fire_at_idle(self, elm_server, client):
-        bov = BovTrigger()
+    def test_turbo_does_not_fire_at_idle(self, elm_server, client):
+        turbo = TurboTrigger()
 
         elm_server.apply_data_point(0, 800, 0)
         for t in range(0, 1000, 100):
             r_tps   = client.query("0111")
             r_speed = client.query("010D")
             r_rpm   = client.query("010C")
-            bov.update(
+            turbo.update(
                 parse_pid(r_tps,   1, 100.0 / 255.0),
                 parse_pid(r_rpm,   2, 0.25),
                 parse_pid(r_speed, 1, 1.0),
                 t,
             )
 
-        assert bov.count == 0
+        assert turbo.count == 0

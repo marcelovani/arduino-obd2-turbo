@@ -1,6 +1,6 @@
 // Phase 4 — Full dashboard
 // State machine: SCANNING → CONNECTING → INIT_ELM → RUNNING
-// Auto-connects to ELM327. OLED shows live gauges. BOV sound fires on gear change.
+// Auto-connects to ELM327. OLED shows live gauges. Turbo sound fires on gear change.
 // Rotate encoder to cycle views. Click encoder to disconnect and rescan.
 //
 // Libraries needed: U8g2, DFRobotDFPlayerMini, Bounce2, Adafruit MPU6050, Adafruit Unified Sensor
@@ -21,12 +21,12 @@
 #define PIN_DFP_RX  16
 #define PIN_DFP_TX  17
 
-// ── BOV thresholds ────────────────────────────────────────────────────────
-#define BOV_THROTTLE_HIGH  40.0f
-#define BOV_THROTTLE_LOW   10.0f
-#define BOV_RPM_MIN        1500.0f
-#define BOV_MAX_GEAR       2
-#define BOV_COOLDOWN_MS    2000
+// ── Turbo thresholds ────────────────────────────────────────────────────────
+#define TURBO_THROTTLE_HIGH  40.0f
+#define TURBO_THROTTLE_LOW   10.0f
+#define TURBO_RPM_MIN        1500.0f
+#define TURBO_MAX_GEAR       2
+#define TURBO_COOLDOWN_MS    2000
 
 // ── Objects ───────────────────────────────────────────────────────────────
 BluetoothSerial    BT;
@@ -49,8 +49,8 @@ float metricSpeed  = 0;
 float metricRPM    = 0;
 float metricGforce = 0;
 float prevTPS      = 0;
-uint32_t lastBovMs = 0;
-uint32_t bovCount  = 0;
+uint32_t lastTurboMs = 0;
+uint32_t turboCount  = 0;
 
 #define NUM_VIEWS 4
 
@@ -94,22 +94,22 @@ int estimateGear(float rpm, float speedKmh) {
   return 6;
 }
 
-// ── BOV trigger ───────────────────────────────────────────────────────────
-void checkBov() {
+// ── Turbo trigger ───────────────────────────────────────────────────────────
+void checkTurbo() {
   uint32_t now = millis();
   int gear = estimateGear(metricRPM, metricSpeed);
 
-  if (now - lastBovMs >= BOV_COOLDOWN_MS &&
-      prevTPS        > BOV_THROTTLE_HIGH &&
-      metricTPS      < BOV_THROTTLE_LOW  &&
-      metricRPM      > BOV_RPM_MIN       &&
+  if (now - lastTurboMs >= TURBO_COOLDOWN_MS &&
+      prevTPS        > TURBO_THROTTLE_HIGH &&
+      metricTPS      < TURBO_THROTTLE_LOW  &&
+      metricRPM      > TURBO_RPM_MIN       &&
       gear           > 0                 &&
-      gear          <= BOV_MAX_GEAR) {
+      gear          <= TURBO_MAX_GEAR) {
     dfplayer.play(1);
-    lastBovMs = now;
-    bovCount++;
-    Serial.printf("BOV #%lu  TPS %.0f→%.0f%%  RPM %.0f  Gear %d\n",
-                  bovCount, prevTPS, metricTPS, metricRPM, gear);
+    lastTurboMs = now;
+    turboCount++;
+    Serial.printf("Turbo #%lu  TPS %.0f→%.0f%%  RPM %.0f  Gear %d\n",
+                  turboCount, prevTPS, metricTPS, metricRPM, gear);
   }
   prevTPS = metricTPS;
 }
@@ -128,7 +128,7 @@ void showMessage(const char* line1, const char* line2 = nullptr) {
 
 void drawRunning() {
   int gear = estimateGear(metricRPM, metricSpeed);
-  bool bovRecent = (millis() - lastBovMs < 800);
+  bool turboRecent = (millis() - lastTurboMs < 800);
   char buf[24];
 
   display.clearBuffer();
@@ -166,7 +166,7 @@ void drawRunning() {
     display.drawStr(0, 30, buf);
     snprintf(buf, sizeof(buf), "RPM: %.0f", metricRPM);
     display.drawStr(0, 46, buf);
-    snprintf(buf, sizeof(buf), bovRecent ? "PSSSSH! #%lu" : "BOV: %lu", bovCount);
+    snprintf(buf, sizeof(buf), turboRecent ? "PSSSSH! #%lu" : "Turbo: %lu", turboCount);
     display.drawStr(0, 62, buf);
 
   } else {
@@ -283,7 +283,7 @@ void doRunning() {
     r = obdSend("0111"); metricTPS   = max(0.0f, parsePID(r, 1, 100.0f / 255.0f));
     r = obdSend("010D"); metricSpeed = max(0.0f, parsePID(r, 1, 1.0f));
     r = obdSend("010C"); metricRPM   = max(0.0f, parsePID(r, 2, 0.25f));
-    checkBov();
+    checkTurbo();
     lastPollMs = now;
   }
 
@@ -317,7 +317,7 @@ void setup() {
     dfplayer.volume(25);
     Serial.println("DFPlayer ready");
   } else {
-    Serial.println("DFPlayer failed — BOV sounds disabled");
+    Serial.println("DFPlayer failed — Turbo sounds disabled");
   }
 
   showMessage("OBD2 Turbo", "v1.0");
