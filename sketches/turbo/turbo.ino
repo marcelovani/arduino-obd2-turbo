@@ -13,7 +13,7 @@
 //
 // Hardware (Wokwi simulation):
 //   SSD1306 OLED, KY-040 encoder, LED on GPIO17
-//   OBD2 data replayed from a built-in 9-second driving scenario.
+//   OBD2 data replayed from a built-in scenario.
 //
 // Encoder: rotate = cycle views, click = reset counter (sim) / disconnect BT (device)
 
@@ -45,6 +45,9 @@
 #define TURBO_MAX_GEAR       2
 #define TURBO_COOLDOWN_MS    2000
 
+// ── Engine state threshold ────────────────────────────────────────────────
+#define ENGINE_IDLE_RPM  200.0f   // below this = engine off → parked screen
+
 // ── Encoder sensitivity ───────────────────────────────────────────────────
 #ifdef SIMULATION
   #define STEPS_PER_ZONE  1   // Wokwi encoder sends 1 pulse per detent
@@ -66,31 +69,32 @@ int      currentView  = 0;     // 0=throttle, 1=speed, 2=all, 3=bars
 int      encoderPos   = 0;     // 0..(4*STEPS_PER_ZONE-1)
 int      lastClk      = HIGH;
 
-float    metricTPS    = 0;
-float    metricSpeed  = 0;
-float    metricRPM    = 0;
-float    prevTPS      = 0;
-uint32_t lastTurboMs  = 0;
-uint32_t turboCount   = 0;
-uint32_t turboUntilMs = 0;    // show "PSSSSH!" banner until this time
-uint32_t lastDrawMs   = 0;
+float    metricTPS      = 0;
+float    metricSpeed    = 0;
+float    metricRPM      = 0;
+float    metricVoltage  = 0;
+float    metricCoolant  = -999;  // °C, -999 = not yet read
+float    prevTPS        = 0;
+uint32_t lastTurboMs    = 0;
+uint32_t turboCount     = 0;
+uint32_t turboUntilMs   = 0;
+uint32_t lastDrawMs     = 0;
 
 #ifdef SIMULATION
-  uint32_t turboSoundUntilMs = 0;   // LED blinks while this is in the future
+  uint32_t turboSoundUntilMs = 0;
   int      scenIdx            = 0;
   uint32_t scenStart          = 0;
+  enum SimPhase { SIM_SCANNING, SIM_CONNECTING, SIM_INIT, SIM_RUNNING };
+  SimPhase simPhase      = SIM_SCANNING;
+  uint32_t simPhaseStart = 0;
 #else
   enum AppState { SCANNING, CONNECTING, INIT_ELM, RUNNING };
   AppState appState      = SCANNING;
   String   targetName    = "";
   uint32_t lastPollMs    = 0;
-  uint32_t lastIdlePollMs = 0;  // slow poll for voltage/coolant when engine off
-  float    metricVoltage = 0;
-  float    metricCoolant = -999;  // °C, -999 = not yet read
-  int      scanFrame     = 0;    // spinner animation index
+  uint32_t lastIdlePollMs = 0;
+  int      scanFrame     = 0;
 #endif
-
-#define ENGINE_IDLE_RPM  200.0f   // RPM below this = engine off, show parked screen
 
 // ── Gear estimation ───────────────────────────────────────────────────────
 // RPM/speed ratio thresholds tuned for a small European petrol car.
@@ -152,7 +156,43 @@ void readEncoder() {
   lastClk = clk;
 }
 
-// ── Display ───────────────────────────────────────────────────────────────
+// ── Shared display helpers ────────────────────────────────────────────────
+void showMessage(const char* line1, const char* line2 = nullptr, const char* line3 = nullptr) {
+  display.clearBuffer();
+  display.setFont(u8g2_font_ncenB10_tr);
+  display.drawStr(0, 18, line1);
+  display.setFont(u8g2_font_ncenB08_tr);
+  if (line2) display.drawStr(0, 34, line2);
+  if (line3) display.drawStr(0, 50, line3);
+  display.sendBuffer();
+}
+
+void drawParked(const char* deviceName) {
+  display.clearBuffer();
+  display.setFont(u8g2_font_ncenB08_tr);
+
+  char nameBuf[18];
+  strncpy(nameBuf, deviceName, 17); nameBuf[17] = '\0';
+  display.drawStr(0, 10, nameBuf);
+  display.drawHLine(0, 13, 128);
+
+  char buf[24];
+  if (metricVoltage > 0) {
+    snprintf(buf, sizeof(buf), "Battery:  %.1f V", metricVoltage);
+    display.drawStr(0, 27, buf);
+  }
+  if (metricCoolant > -999) {
+    snprintf(buf, sizeof(buf), "Coolant:  %.0f C", metricCoolant);
+    display.drawStr(0, 40, buf);
+  }
+
+  if ((millis() / 600) % 2 == 0)
+    display.drawStr(0, 56, "Start engine...");
+
+  display.sendBuffer();
+}
+
+// ── Gauge display ─────────────────────────────────────────────────────────
 void drawDisplay() {
   int  gear        = estimateGear(metricRPM, metricSpeed);
   bool turboRecent = (millis() < turboUntilMs);
@@ -240,28 +280,30 @@ void drawDisplay() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SIMULATION build: scenario playback, LED blink
+// SIMULATION build: scenario playback, startup phases, LED blink
 // ═══════════════════════════════════════════════════════════════════════════
 #ifdef SIMULATION
 
 // {time_ms, tps%, rpm, speed_kmh}
-// Two Turbo triggers expected: at ~2800ms (1st→2nd) and ~5000ms (2nd→3rd).
+// Starts with 2s engine-off (parked screen), then engine starts and drives.
+// Two Turbo triggers expected: at ~4800ms (1st→2nd) and ~7000ms (2nd→3rd).
 struct DataPoint { uint32_t t; float tps; float rpm; float speed; };
 static const DataPoint SCENARIO[] = {
-  {    0,  0,   800,  0  },
-  {  800, 30,  1500, 10  },
-  { 1500, 75,  2800, 20  },
-  { 2200, 85,  3300, 26  },
-  { 2800,  4,  3200, 28  },  // *** Turbo #1 ***
-  { 3000, 55,  2400, 33  },
-  { 3600, 80,  3100, 42  },
-  { 4300, 85,  3500, 46  },
-  { 5000,  4,  3300, 48  },  // *** Turbo #2 ***
-  { 5200, 45,  2200, 55  },
-  { 6000, 60,  2700, 62  },
-  { 7000,  3,  2500, 65  },
-  { 8000,  0,  1000, 30  },
-  { 9000,  0,   800,  0  },
+  {    0,  0,    0,  0  },  // engine off → parked screen
+  { 2000,  0,  800,  0  },  // engine starts → gauge screen
+  { 2800, 30, 1500, 10  },  // pulling away in 1st
+  { 3500, 75, 2800, 20  },  // accelerating hard
+  { 4200, 85, 3300, 26  },  // near red-line 1st gear
+  { 4800,  4, 3200, 28  },  // *** Turbo #1 *** (1st→2nd)
+  { 5000, 55, 2400, 33  },  // back on throttle in 2nd
+  { 5600, 80, 3100, 42  },  // hard acceleration in 2nd
+  { 6300, 85, 3500, 46  },  // near red-line 2nd gear
+  { 7000,  4, 3300, 48  },  // *** Turbo #2 *** (2nd→3rd)
+  { 7200, 45, 2200, 55  },  // into 3rd, steady throttle
+  { 8000, 60, 2700, 62  },  // cruising 3rd — no Turbo
+  { 9000,  3, 2500, 65  },  // lift in 3rd — no Turbo (gear > max_gear)
+  {10000,  0, 1000, 30  },  // braking
+  {11000,  0,  800,  0  },  // back to idle — loop restarts
 };
 static const int SCENARIO_LEN = sizeof(SCENARIO) / sizeof(SCENARIO[0]);
 
@@ -290,6 +332,11 @@ void advanceScenario() {
 // ═══════════════════════════════════════════════════════════════════════════
 #ifndef SIMULATION
 
+float parseVoltage(const String& resp) {
+  float v = strtof(resp.c_str(), nullptr);
+  return (v > 5.0f && v < 20.0f) ? v : 0;
+}
+
 String obdSend(const char* cmd, uint16_t timeout = 1000) {
   while (BT.available()) BT.read();
   BT.print(cmd);
@@ -316,19 +363,11 @@ float parsePID(const String& resp, int bytes, float multiplier) {
   return (hi * 256.0f + lo) * multiplier;
 }
 
-// ATRV returns e.g. "12.4V" — just parse the float
-float parseVoltage(const String& resp) {
-  float v = strtof(resp.c_str(), nullptr);
-  return (v > 5.0f && v < 20.0f) ? v : 0;
-}
-
-// ── SCANNING: animated spinner, then blocking BT scan ────────────────────
 void doScanning() {
   static const char SPIN[] = {'-', '/', '|', '\\'};
   char line1[22];
-  snprintf(line1, sizeof(line1), "Scanning OBD2...  %c", SPIN[scanFrame % 4]);
+  snprintf(line1, sizeof(line1), "Scanning OBD2... %c", SPIN[scanFrame % 4]);
   scanFrame++;
-
   display.clearBuffer();
   display.setFont(u8g2_font_ncenB10_tr);
   display.drawStr(0, 20, line1);
@@ -340,12 +379,7 @@ void doScanning() {
   Serial.println("Scanning for ELM327...");
   BTScanResults* results = BT.discover(8000);
   if (!results || results->getCount() == 0) {
-    display.clearBuffer();
-    display.setFont(u8g2_font_ncenB10_tr);
-    display.drawStr(0, 20, "No device found");
-    display.setFont(u8g2_font_ncenB08_tr);
-    display.drawStr(0, 38, "Retrying...");
-    display.sendBuffer();
+    showMessage("No device found", "Retrying...");
     delay(3000);
     return;
   }
@@ -360,29 +394,15 @@ void doScanning() {
       return;
     }
   }
-  display.clearBuffer();
-  display.setFont(u8g2_font_ncenB10_tr);
-  display.drawStr(0, 20, "ELM327 not found");
-  display.setFont(u8g2_font_ncenB08_tr);
-  display.drawStr(0, 38, "Retrying...");
-  display.sendBuffer();
+  showMessage("ELM327 not found", "Retrying...");
   delay(3000);
 }
 
-// ── CONNECTING ────────────────────────────────────────────────────────────
 void doConnecting() {
   Serial.printf("Connecting to: %s\n", targetName.c_str());
-
-  display.clearBuffer();
-  display.setFont(u8g2_font_ncenB10_tr);
-  display.drawStr(0, 18, "Found:");
-  display.setFont(u8g2_font_ncenB08_tr);
-  // Truncate long names to fit the 128px display
   char nameBuf[18];
   strncpy(nameBuf, targetName.c_str(), 17); nameBuf[17] = '\0';
-  display.drawStr(0, 32, nameBuf);
-  display.drawStr(0, 48, "Connecting...");
-  display.sendBuffer();
+  showMessage("Found:", nameBuf, "Connecting...");
 
   const char* pins[] = {"1234", "0000"};
   for (const char* pin : pins) {
@@ -394,32 +414,20 @@ void doConnecting() {
     }
     delay(500);
   }
-  display.clearBuffer();
-  display.setFont(u8g2_font_ncenB10_tr);
-  display.drawStr(0, 20, "Connect failed");
-  display.setFont(u8g2_font_ncenB08_tr);
-  display.drawStr(0, 38, "Scanning again...");
-  display.sendBuffer();
+  showMessage("Connect failed", "Scanning again...");
   delay(2000);
   appState = SCANNING;
 }
 
-// ── INIT_ELM ──────────────────────────────────────────────────────────────
 void doInitElm() {
-  display.clearBuffer();
-  display.setFont(u8g2_font_ncenB10_tr);
-  display.drawStr(0, 18, "Initialising...");
-  display.setFont(u8g2_font_ncenB08_tr);
   char nameBuf[18];
   strncpy(nameBuf, targetName.c_str(), 17); nameBuf[17] = '\0';
-  display.drawStr(0, 32, nameBuf);
-  display.sendBuffer();
+  showMessage("Initialising...", nameBuf);
 
   obdSend("ATZ", 3000); delay(500);
   const char* cmds[] = {"ATE0", "ATL0", "ATS0", "ATH0", "ATSP0"};
   for (const char* cmd : cmds) { obdSend(cmd, 1500); delay(100); }
 
-  // Read battery voltage right after init
   String vResp = obdSend("ATRV", 1500);
   metricVoltage = parseVoltage(vResp);
 
@@ -429,8 +437,8 @@ void doInitElm() {
   display.setFont(u8g2_font_ncenB08_tr);
   display.drawStr(0, 32, nameBuf);
   if (metricVoltage > 0) {
-    char vbuf[16];
-    snprintf(vbuf, sizeof(vbuf), "Battery: %.1fV", metricVoltage);
+    char vbuf[20];
+    snprintf(vbuf, sizeof(vbuf), "Battery: %.1f V", metricVoltage);
     display.drawStr(0, 48, vbuf);
   }
   display.sendBuffer();
@@ -438,54 +446,25 @@ void doInitElm() {
   appState = RUNNING;
 }
 
-// ── Parked screen (engine off) ────────────────────────────────────────────
-void drawParked() {
-  display.clearBuffer();
-  display.setFont(u8g2_font_ncenB08_tr);
-
-  char nameBuf[18];
-  strncpy(nameBuf, targetName.c_str(), 17); nameBuf[17] = '\0';
-  display.drawStr(0, 10, nameBuf);
-  display.drawHLine(0, 13, 128);
-
-  char buf[24];
-  if (metricVoltage > 0) {
-    snprintf(buf, sizeof(buf), "Battery:  %.1f V", metricVoltage);
-    display.drawStr(0, 27, buf);
-  }
-  if (metricCoolant > -999) {
-    snprintf(buf, sizeof(buf), "Coolant:  %.0f C", metricCoolant);
-    display.drawStr(0, 40, buf);
-  }
-
-  // Blink "Start engine..." at ~0.8 Hz
-  if ((millis() / 600) % 2 == 0) {
-    display.drawStr(0, 56, "Start engine...");
-  }
-
-  display.sendBuffer();
-}
-
-// ── RUNNING ───────────────────────────────────────────────────────────────
 void doRunning() {
   uint32_t now = millis();
   readEncoder();
 
   if (metricRPM < ENGINE_IDLE_RPM) {
-    // Engine off — slow-poll voltage and coolant, show parked screen
+    // Engine off — slow-poll voltage/coolant, show parked screen
     if (now - lastIdlePollMs >= 3000) {
       String r;
-      r = obdSend("ATRV", 1500);         metricVoltage = parseVoltage(r);
-      r = obdSend("0105", 1000); { float v = parsePID(r, 1, 1.0f); if (v >= 0) metricCoolant = v - 40.0f; }
-      r = obdSend("010C", 1000);         metricRPM = max(0.0f, parsePID(r, 2, 0.25f));
+      r = obdSend("ATRV", 1500);       metricVoltage = parseVoltage(r);
+      r = obdSend("0105", 1000);  { float v = parsePID(r, 1, 1.0f); if (v >= 0) metricCoolant = v - 40.0f; }
+      r = obdSend("010C", 1000);        metricRPM = max(0.0f, parsePID(r, 2, 0.25f));
       lastIdlePollMs = now;
     }
     if (now - lastDrawMs >= 100) {
-      drawParked();
+      drawParked(targetName.c_str());
       lastDrawMs = now;
     }
   } else {
-    // Engine running — fast-poll all drive metrics, show gauges
+    // Engine running — fast-poll drive metrics, show gauges
     if (now - lastPollMs >= 100) {
       String r;
       r = obdSend("0111"); metricTPS   = max(0.0f, parsePID(r, 1, 100.0f / 255.0f));
@@ -507,13 +486,6 @@ void doRunning() {
 void setup() {
   Serial.begin(115200);
   Serial.println("\n=== Turbo Sound Emulator ===");
-#ifdef SIMULATION
-  Serial.println("Mode: Wokwi simulation");
-  Serial.println("Rotate encoder to cycle views.");
-  Serial.println("Push encoder button to reset Turbo counter.");
-#else
-  Serial.println("Mode: Real device");
-#endif
 
   Wire.begin();
   display.begin();
@@ -538,7 +510,7 @@ void setup() {
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, LOW);
   delay(800);
-  scenStart = millis();
+  simPhaseStart = millis();
 #else
   Serial2.begin(9600, SERIAL_8N1, PIN_DFP_RX, PIN_DFP_TX);
   BT.begin("ESP32-OBD", true);
@@ -556,14 +528,88 @@ void setup() {
 void loop() {
 #ifdef SIMULATION
   uint32_t now = millis();
-  readEncoder();  // polled every iteration — no delay, so no pulses are missed
-  if (now - lastDrawMs >= 50) {
-    advanceScenario();
-    checkTurbo(now);
-    digitalWrite(PIN_LED, (now < turboSoundUntilMs && (now / 100) % 2 == 0) ? HIGH : LOW);
-    drawDisplay();
-    lastDrawMs = now;
+  readEncoder();
+
+  switch (simPhase) {
+
+    case SIM_SCANNING: {
+      // Spinner animates in real time using millis()
+      if (now - lastDrawMs >= 150) {
+        static const char SPIN[] = {'-', '/', '|', '\\'};
+        char line1[22];
+        snprintf(line1, sizeof(line1), "Scanning OBD2... %c", SPIN[(now / 150) % 4]);
+        display.clearBuffer();
+        display.setFont(u8g2_font_ncenB10_tr);
+        display.drawStr(0, 20, line1);
+        display.setFont(u8g2_font_ncenB08_tr);
+        display.drawStr(0, 38, "Looking for ELM327");
+        display.sendBuffer();
+        lastDrawMs = now;
+      }
+      if (now - simPhaseStart >= 3000) {
+        simPhase = SIM_CONNECTING;
+        simPhaseStart = now;
+      }
+      break;
+    }
+
+    case SIM_CONNECTING: {
+      if (now - lastDrawMs >= 50) {
+        showMessage("Found:", "ELM327-SIM", "Connecting...");
+        lastDrawMs = now;
+      }
+      if (now - simPhaseStart >= 2000) {
+        simPhase = SIM_INIT;
+        simPhaseStart = now;
+        // Set simulated values shown on the confirmation screen
+        metricVoltage = 12.4f;
+        metricCoolant = 18.0f;  // cold engine
+      }
+      break;
+    }
+
+    case SIM_INIT: {
+      bool confirmed = (now - simPhaseStart >= 1500);
+      if (now - lastDrawMs >= 50) {
+        if (!confirmed) {
+          showMessage("Initialising...", "ELM327-SIM");
+        } else {
+          display.clearBuffer();
+          display.setFont(u8g2_font_ncenB10_tr);
+          display.drawStr(0, 18, "OBD2 connected!");
+          display.setFont(u8g2_font_ncenB08_tr);
+          display.drawStr(0, 32, "ELM327-SIM");
+          char vbuf[20];
+          snprintf(vbuf, sizeof(vbuf), "Battery: %.1f V", metricVoltage);
+          display.drawStr(0, 48, vbuf);
+          display.sendBuffer();
+        }
+        lastDrawMs = now;
+      }
+      if (now - simPhaseStart >= 3000) {
+        simPhase  = SIM_RUNNING;
+        scenStart = millis();
+        Serial.println("[SIM] Starting driving scenario");
+      }
+      break;
+    }
+
+    case SIM_RUNNING: {
+      if (now - lastDrawMs >= 50) {
+        advanceScenario();
+        checkTurbo(now);
+        digitalWrite(PIN_LED, (now < turboSoundUntilMs && (now / 100) % 2 == 0) ? HIGH : LOW);
+        if (metricRPM < ENGINE_IDLE_RPM) {
+          drawParked("ELM327-SIM");
+        } else {
+          drawDisplay();
+        }
+        lastDrawMs = now;
+      }
+      break;
+    }
   }
+
 #else
   switch (appState) {
     case SCANNING:   doScanning();   break;
