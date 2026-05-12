@@ -10,10 +10,17 @@
 #   make scenario SCENARIO=first_gear_change   Run one scenario
 #   make scenario THROTTLE_HIGH=35 RPM_MIN=1200  Tune BOV thresholds
 #   make emulator         Start the real ELM327-emulator for manual testing
+#   make wokwi-setup      Install arduino-cli + ESP32 board + libraries (once)
+#   make wokwi-build      Compile Wokwi simulation sketch → firmware .bin/.elf
 #   make clean            Remove virtual environment and caches
 #
 # Quick start:
 #   make build && make test
+#
+# Wokwi VS Code extension quick start:
+#   brew install arduino-cli   (Mac — one time)
+#   make wokwi-setup           (one time)
+#   make wokwi-build           (after any sketch change)
 # ─────────────────────────────────────────────────────────────────────────────
 
 PYTHON      := python3
@@ -35,7 +42,14 @@ SPEED          ?= 1.0
 EMULATOR_PORT  := 35000
 EMULATOR_PID   := /tmp/elm327_emulator.pid
 
-.PHONY: build test test-unit test-emulator scenario emulator clean help
+# Wokwi / Arduino CLI settings
+ARDUINO_CLI    := arduino-cli
+WOKWI_SKETCH   := Emulators/Wokwi
+WOKWI_BUILD    := $(WOKWI_SKETCH)/build
+FQBN           := esp32:esp32:esp32doit-devkit-v1
+
+.PHONY: build test test-unit test-emulator scenario emulator \
+        wokwi-setup wokwi-build clean help
 
 # ─── help ────────────────────────────────────────────────────────────────────
 help:
@@ -48,6 +62,8 @@ help:
 	@echo "  make scenario SCENARIO=first_gear_change"
 	@echo "  make scenario THROTTLE_HIGH=35 RPM_MIN=1200  (tune thresholds)"
 	@echo "  make emulator         Start real ELM327-emulator (manual use)"
+	@echo "  make wokwi-setup      Install arduino-cli board + libraries (once)"
+	@echo "  make wokwi-build      Compile Wokwi sketch for VS Code extension"
 	@echo "  make clean            Remove venv and caches"
 	@echo ""
 
@@ -134,6 +150,38 @@ emulator-bridge:
 	@echo "Bridging ELM327-emulator PTY to TCP port $(EMULATOR_PORT)..."
 	@echo "Requires socat. Install with: brew install socat"
 	socat TCP-LISTEN:$(EMULATOR_PORT),reuseaddr,fork FILE:/tmp/elm_pty,nonblock,raw,echo=0
+
+# ─── Wokwi firmware build ────────────────────────────────────────────────────
+# Compiles Emulators/Wokwi/sketch.ino into a .bin/.elf that the Wokwi VS Code
+# extension can simulate.  Run wokwi-setup once before the first build.
+#
+# Install arduino-cli first:
+#   Mac:   brew install arduino-cli
+#   Linux: curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+
+wokwi-setup:
+	@which $(ARDUINO_CLI) > /dev/null 2>&1 || \
+	    (echo "arduino-cli not found — install with: brew install arduino-cli" && exit 1)
+	@echo "→ Updating board index..."
+	$(ARDUINO_CLI) core update-index
+	@echo "→ Installing ESP32 board package..."
+	$(ARDUINO_CLI) core install esp32:esp32
+	@echo "→ Installing Arduino libraries..."
+	$(ARDUINO_CLI) lib install "U8g2"
+	$(ARDUINO_CLI) lib install "Bounce2"
+	$(ARDUINO_CLI) lib install "Adafruit MPU6050"
+	$(ARDUINO_CLI) lib install "Adafruit Unified Sensor"
+	@echo "✓ Wokwi setup complete. Run: make wokwi-build"
+
+wokwi-build:
+	@which $(ARDUINO_CLI) > /dev/null 2>&1 || \
+	    (echo "arduino-cli not found — run: make wokwi-setup" && exit 1)
+	@echo "→ Compiling $(WOKWI_SKETCH)/sketch.ino..."
+	$(ARDUINO_CLI) compile \
+	    --fqbn $(FQBN) \
+	    --output-dir $(WOKWI_BUILD) \
+	    $(WOKWI_SKETCH)
+	@echo "✓ Firmware ready: $(WOKWI_BUILD)/sketch.ino.bin"
 
 # ─── clean ───────────────────────────────────────────────────────────────────
 clean:
