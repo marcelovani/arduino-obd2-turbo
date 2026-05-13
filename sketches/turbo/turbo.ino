@@ -47,8 +47,9 @@
 #define TURBO_VOLUME_GEAR1   30    // 100% — DFPlayer max is 30
 #define TURBO_VOLUME_GEAR2   21    // 70%
 
-// ── Engine state threshold ────────────────────────────────────────────────
-#define ENGINE_IDLE_RPM  200.0f   // below this = engine off → parked screen
+// ── Engine state thresholds ───────────────────────────────────────────────
+#define ENGINE_IDLE_RPM    200.0f   // below = engine off → parked screen, poll battery/coolant/RPM
+#define ENGINE_DRIVING_RPM 1000.0f  // above = driving → poll TPS + speed + RPM
 
 // ── Encoder sensitivity ───────────────────────────────────────────────────
 #define STEPS_PER_ZONE  1   // 1 detent = 1 view change
@@ -121,11 +122,9 @@ uint32_t lastDrawMs     = 0;
   String   targetName      = "";
   uint32_t lastPollMs      = 0;
   uint32_t lastIdlePollMs  = 0;
-  uint32_t engineOffSince  = 0;   // millis() when RPM first dropped below threshold
   uint32_t lastEncActiveMs = 0;   // millis() of last encoder turn
   int      scanFrame       = 0;
-  #define  ENGINE_OFF_DEBOUNCE_MS   3000  // RPM must stay low for 3s before parked screen
-  #define  ENCODER_PRIORITY_MS       500  // pause OBD2 for 500ms after encoder activity
+  #define  ENCODER_PRIORITY_MS  500  // pause OBD2 for 500ms after encoder activity
 #endif
 
 // ── Gear estimation ───────────────────────────────────────────────────────
@@ -499,19 +498,10 @@ void doInitElm() {
 void doRunning() {
   uint32_t now = millis();
   readEncoder();
-
-  // Debounce the engine-off transition so a single bad read can't flip the screen
-  if (metricRPM >= ENGINE_IDLE_RPM) {
-    engineOffSince = 0;
-  } else if (engineOffSince == 0) {
-    engineOffSince = now;
-  }
-  bool engineOff = (engineOffSince > 0 && now - engineOffSince >= ENGINE_OFF_DEBOUNCE_MS);
-
   bool encActive = (now - lastEncActiveMs < ENCODER_PRIORITY_MS);
 
-  if (engineOff) {
-    // Engine off — slow-poll voltage/coolant, show parked screen
+  if (metricRPM < ENGINE_IDLE_RPM) {
+    // ── PARKED: engine off — poll battery, coolant, RPM every 3s ──────────
     if (!encActive && now - lastIdlePollMs >= 3000) {
       String r; float v;
       r = obdSend("ATRV", 1500); v = parseVoltage(r);       if (v > 0)  metricVoltage = v;
@@ -519,12 +509,26 @@ void doRunning() {
       r = obdSend("010C");       v = parsePID(r, 2, 0.25f); if (v >= 0) metricRPM     = v;
       lastIdlePollMs = now;
     }
-    if (now - lastDrawMs >= 100) {
+    if (now - lastDrawMs >= 200) {
       drawParked(targetName.c_str());
       lastDrawMs = now;
     }
+
+  } else if (metricRPM < ENGINE_DRIVING_RPM) {
+    // ── IDLE: engine running, not moving — poll RPM only every 500ms ──────
+    // Rotary is fully unblocked; TPS/speed not needed, no Turbo possible.
+    if (!encActive && now - lastPollMs >= 500) {
+      String r; float v;
+      r = obdSend("010C"); v = parsePID(r, 2, 0.25f); if (v >= 0) metricRPM = v;
+      lastPollMs = now;
+    }
+    if (now - lastDrawMs >= 50) {
+      drawDisplay();
+      lastDrawMs = now;
+    }
+
   } else {
-    // Engine running — fast-poll gauges, skip poll while encoder is active
+    // ── DRIVING: RPM ≥ 1000 — poll TPS + speed + RPM every 100ms ─────────
     if (!encActive && now - lastPollMs >= 100) {
       String r; float v;
       r = obdSend("0111"); v = parsePID(r, 1, 100.0f / 255.0f); if (v >= 0) metricTPS   = v;
