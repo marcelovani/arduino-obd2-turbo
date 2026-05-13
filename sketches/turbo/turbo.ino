@@ -63,30 +63,32 @@ Bounce encBtn;
 #endif
 
 // ── Encoder ISRs (real device only) ──────────────────────────────────────
-// Two ISRs — one on CLK FALLING, one on DT FALLING — cover both KY-040
-// variants (some lead with CLK for CW, some lead with DT for CCW) and
-// allow CW/CCW in rapid succession without a shared debounce blocking one.
-// GPIO register reads are used instead of digitalRead() — safe in ISR.
-// 1 ms per-pin debounce rejects contact bounce (KY-040 bounce < 1 ms).
+// Whichever pin falls FIRST determines direction; the second pin's fall is
+// ignored because the other ISR already updated its timestamp recently.
+// This works for all KY-040 variants regardless of which pin leads for CW.
+//   CW:  DT falls first  → encISR_DT  fires, encDelta++
+//         CLK falls after → encISR_CLK  sees DtUs was recent, skips
+//   CCW: CLK falls first → encISR_CLK fires, encDelta--
+//         DT falls after  → encISR_DT  sees ClkUs was recent, skips
+// 500 µs cross-pin window filters second edges; 500 µs self-debounce
+// filters contact bounce (KY-040 bounce well under 500 µs).
 #ifndef SIMULATION
-  volatile int           encDelta  = 0;
-  volatile unsigned long encClkUs  = 0;   // last CLK-ISR timestamp
-  volatile unsigned long encDtUs   = 0;   // last DT-ISR timestamp
+  volatile int           encDelta = 0;
+  volatile unsigned long encClkUs = 0;
+  volatile unsigned long encDtUs  = 0;
 
-  // CLK falls while DT is HIGH → one direction
   void IRAM_ATTR encISR_CLK() {
     unsigned long now = micros();
-    if (now - encClkUs < 1000) return;
+    if (now - encClkUs < 500) return;      // self-debounce
     encClkUs = now;
-    if ((GPIO.in >> PIN_ENC_DT) & 1) encDelta--;
+    if (now - encDtUs > 500) encDelta--;   // CLK led → CCW
   }
 
-  // DT falls while CLK is HIGH → other direction
   void IRAM_ATTR encISR_DT() {
     unsigned long now = micros();
-    if (now - encDtUs < 1000) return;
+    if (now - encDtUs < 500) return;       // self-debounce
     encDtUs = now;
-    if ((GPIO.in >> PIN_ENC_CLK) & 1) encDelta++;
+    if (now - encClkUs > 500) encDelta++;  // DT led → CW
   }
 #endif
 
