@@ -33,7 +33,7 @@
 
 #ifdef SIMULATION
   #define PIN_BUZZER  17   // passive buzzer — beeps when Turbo fires (TX2)
-  #define PIN_LED      2   // LED — blinks while Turbo sound plays
+  #define PIN_LED      4   // LED — blinks while Turbo sound plays
 #else
   #define PIN_DFP_RX  16
   #define PIN_DFP_TX  17
