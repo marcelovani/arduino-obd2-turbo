@@ -122,8 +122,10 @@ uint32_t lastDrawMs     = 0;
   uint32_t lastPollMs      = 0;
   uint32_t lastIdlePollMs  = 0;
   uint32_t engineOffSince  = 0;   // millis() when RPM first dropped below threshold
+  uint32_t lastEncActiveMs = 0;   // millis() of last encoder turn
   int      scanFrame       = 0;
-  #define  ENGINE_OFF_DEBOUNCE_MS  3000  // RPM must stay low for 3s before parked screen
+  #define  ENGINE_OFF_DEBOUNCE_MS   3000  // RPM must stay low for 3s before parked screen
+  #define  ENCODER_PRIORITY_MS       500  // pause OBD2 for 500ms after encoder activity
 #endif
 
 // ── Gear estimation ───────────────────────────────────────────────────────
@@ -196,8 +198,9 @@ void readEncoder() {
     encDelta  = 0;
     interrupts();
     int total = 4 * STEPS_PER_ZONE;
-    encoderPos  = ((encoderPos + delta) % total + total) % total;
-    currentView = encoderPos / STEPS_PER_ZONE;
+    encoderPos    = ((encoderPos + delta) % total + total) % total;
+    currentView   = encoderPos / STEPS_PER_ZONE;
+    lastEncActiveMs = millis();
   }
 #endif
 }
@@ -505,14 +508,14 @@ void doRunning() {
   }
   bool engineOff = (engineOffSince > 0 && now - engineOffSince >= ENGINE_OFF_DEBOUNCE_MS);
 
+  bool encActive = (now - lastEncActiveMs < ENCODER_PRIORITY_MS);
+
   if (engineOff) {
     // Engine off — slow-poll voltage/coolant, show parked screen
-    if (now - lastIdlePollMs >= 3000) {
+    if (!encActive && now - lastIdlePollMs >= 3000) {
       String r; float v;
       r = obdSend("ATRV", 1500); v = parseVoltage(r);       if (v > 0)  metricVoltage = v;
-      readEncoder(); drawParked(targetName.c_str());
       r = obdSend("0105");       v = parsePID(r, 1, 1.0f);  if (v >= 0) metricCoolant = v - 40.0f;
-      readEncoder(); drawParked(targetName.c_str());
       r = obdSend("010C");       v = parsePID(r, 2, 0.25f); if (v >= 0) metricRPM     = v;
       lastIdlePollMs = now;
     }
@@ -521,13 +524,11 @@ void doRunning() {
       lastDrawMs = now;
     }
   } else {
-    // Engine running (or RPM drop not yet confirmed) — fast-poll, show gauges
-    if (now - lastPollMs >= 100) {
+    // Engine running — fast-poll gauges, skip poll while encoder is active
+    if (!encActive && now - lastPollMs >= 100) {
       String r; float v;
       r = obdSend("0111"); v = parsePID(r, 1, 100.0f / 255.0f); if (v >= 0) metricTPS   = v;
-      readEncoder(); drawDisplay();
       r = obdSend("010D"); v = parsePID(r, 1, 1.0f);             if (v >= 0) metricSpeed = v;
-      readEncoder(); drawDisplay();
       r = obdSend("010C"); v = parsePID(r, 2, 0.25f);            if (v >= 0) metricRPM   = v;
       checkTurbo(now);
       lastPollMs = now;
