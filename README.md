@@ -101,6 +101,81 @@ make wokwi-build                  # compiles sketch → Emulators/Wokwi/build/
 
 ---
 
+## Testing
+
+There are four testing layers, from fastest to most complete. Run them in
+order when you change trigger logic, thresholds, or the driving scenario.
+
+### 1. Unit tests — no hardware needed
+
+Verifies all trigger logic (parse_pid, estimate_gear, TurboTrigger) and
+replays every driving scenario to check the expected trigger count.
+
+```bash
+make build        # first time only — creates Python venv
+make test-unit
+```
+
+All 39 tests run in under a second. Run this whenever you change a threshold
+constant in the sketch **and** its mirror in `tests/obd_logic.py`.
+
+### 2. Visual scenario monitor — no hardware needed
+
+Replays driving scenarios in the terminal in real time, printing each data
+point and flagging when Turbo fires. Good for checking trigger timing and
+sequence before touching the hardware.
+
+```bash
+make scenario                                    # all scenarios
+make scenario SCENARIO=first_gear_change         # one scenario
+make scenario THROTTLE_HIGH=35 RPM_MIN=1200      # tune thresholds
+```
+
+### 3. Wokwi simulation — ESP32 firmware, no car
+
+Runs the compiled sketch in a browser-based circuit simulation with a virtual
+OLED, encoder, and DFPlayer. The `#ifdef SIMULATION` code path replays the
+built-in driving scenario and fires two Turbo triggers on the virtual display.
+See the [Wokwi simulation](#wokwi-simulation) section above for setup.
+
+```bash
+make wokwi-build   # compile first, then open diagram.json in VS Code
+```
+
+### 4. Real ESP32 via USB — Serial Monitor
+
+Flash the sketch to the ESP32, open the Serial Monitor at **115200 baud**, and
+watch the OBD2 poll output:
+
+```
+[OBD] TPS=87.0 RPM=3400 Speed=60
+[OBD] TPS=4.0  RPM=3300 Speed=60
+[Turbo] gear=1 prev_tps=87.0 tps=4.0 rpm=3300
+```
+
+Every `[Turbo]` line confirms a trigger. This is also where you collect
+real RPM/speed pairs at steady cruise to calibrate the gear ratio thresholds
+in `TURBO_*` constants (see the calibration note in `tests/obd_logic.py`).
+
+**Steps:**
+
+1. Connect ESP32 via USB
+2. Arduino IDE → Tools → Board → **ESP32 Dev Module**
+3. Tools → Port → `/dev/cu.usbserial-...` (Mac) or `COM...` (Windows)
+4. Upload sketch, then open Serial Monitor (Ctrl+Shift+M) at **115200 baud**
+
+### Typical workflow
+
+| Changed                    | Run                                  |
+| -------------------------- | ------------------------------------ |
+| Threshold constant         | `make test-unit` → `make scenario`   |
+| Driving scenario data      | `make test-unit` → `make scenario`   |
+| Display / UI code          | `make wokwi-build` + Wokwi simulator |
+| OBD2 / Bluetooth code      | Flash to ESP32 → Serial Monitor      |
+| Everything before car test | All four layers in order             |
+
+---
+
 ## Project plan
 
 Full technical details, wiring table, state machine, all references, and

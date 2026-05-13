@@ -86,24 +86,24 @@ class TestEstimateGear:
         assert estimate_gear(3000, 20) == 1
 
     def test_second_gear(self):
-        # Typical 2nd gear: RPM 3000 at 35 km/h → ratio ~86
-        assert estimate_gear(3000, 35) == 2
+        # 2nd gear: ratio 33–50. RPM 2600 at 65 km/h → ratio 40
+        assert estimate_gear(2600, 65) == 2
 
     def test_third_gear(self):
-        # Typical 3rd gear: RPM 2800 at 50 km/h → ratio 56
-        assert estimate_gear(2800, 50) == 3
+        # 3rd gear: ratio 19–33. RPM 2500 at 100 km/h → ratio 25
+        assert estimate_gear(2500, 100) == 3
 
     def test_fourth_gear(self):
-        # Typical 4th gear: RPM 2500 at 65 km/h → ratio ~38
-        assert estimate_gear(2500, 65) == 4
+        # 4th gear: ratio 12–19. RPM 2200 at 150 km/h → ratio ~14.7
+        assert estimate_gear(2200, 150) == 4
 
     def test_fifth_gear(self):
-        # Typical 5th gear: RPM 2200 at 80 km/h → ratio ~27.5
-        assert estimate_gear(2200, 80) == 5
+        # 5th gear: ratio 8–12. RPM 2000 at 200 km/h → ratio 10
+        assert estimate_gear(2000, 200) == 5
 
     def test_sixth_gear(self):
-        # 6th gear: RPM 2000 at 100 km/h → ratio 20
-        assert estimate_gear(2000, 100) == 6
+        # 6th gear: ratio < 8. RPM 1800 at 250 km/h → ratio 7.2
+        assert estimate_gear(1800, 250) == 6
 
 
 # ── TurboTrigger ────────────────────────────────────────────────────────────
@@ -136,8 +136,8 @@ class TestTurboTrigger:
 
     def test_no_trigger_in_third_gear(self):
         turbo = TurboTrigger()
-        turbo.update(80, 2800, 55, 0)    # 3rd gear (ratio ~51)
-        triggered = turbo.update(4, 2600, 57, 100)
+        turbo.update(80, 3000, 120, 0)   # 3rd gear (ratio 25 → gear 3)
+        triggered = turbo.update(4, 2800, 122, 100)
         assert not triggered
         assert turbo.count == 0
 

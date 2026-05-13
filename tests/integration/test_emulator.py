@@ -14,6 +14,7 @@ Run automated tests with: make test-emulator
 
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.dirname(__file__))
 
 import pytest
 import time

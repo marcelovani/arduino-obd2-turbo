@@ -25,8 +25,8 @@ A portable device that:
    - Throttle drops rapidly from high to low (driver lifted off / gear change)
    - RPM is aturboe the boost threshold (~1500 RPM)
    - Current gear is 1st or 2nd (configurable)
-5. Displays live gauges on a 0.96" OLED screen
-6. KY-040 rotary encoder to cycle between display views
+4. Displays live gauges on a 0.96" OLED screen
+5. KY-040 rotary encoder to cycle between display views
 
 **Target car:** Mercedes CLA180, 2011, gasoline, **manual gearbox**
 
@@ -77,19 +77,19 @@ These can be adjusted to taste once tested in the car.
 
 ## 3. Bill of materials
 
-| Item                             | Approx price (UK) | Status   | Notes                                                       |
-| -------------------------------- | ----------------- | -------- | ----------------------------------------------------------- |
-| ELEGOO ESP-WROOM-32 DevKit       | £6–8              | To order | Bluetooth Classic + BLE + WiFi. [Amazon link][amz-esp32]    |
-| 0.96" SSD1306 OLED (128x64, I2C) | —                 | Have it  | Model ep0096dtan001a. I2C address 0x3C                      |
-| MPU6050 IMU module (I2C)         | —                 | Have it  | 3-axis accelerometer + gyro, address 0x68                   |
-| KY-040 rotary encoder module     | —                 | Have it  | 5-pin: CLK / DT / SW / + / GND                              |
-| DFPlayer Mini MP3 module         | —                 | Have it  | Same module used in [arduino-laser-target][laser-target]    |
+| Item                             | Approx price (UK) | Status   | Notes                                                         |
+| -------------------------------- | ----------------- | -------- | ------------------------------------------------------------- |
+| ELEGOO ESP-WROOM-32 DevKit       | £6–8              | To order | Bluetooth Classic + BLE + WiFi. [Amazon link][amz-esp32]      |
+| 0.96" SSD1306 OLED (128x64, I2C) | —                 | Have it  | Model ep0096dtan001a. I2C address 0x3C                        |
+| MPU6050 IMU module (I2C)         | —                 | Have it  | 3-axis accelerometer + gyro, address 0x68                     |
+| KY-040 rotary encoder module     | —                 | Have it  | 5-pin: CLK / DT / SW / + / GND                                |
+| DFPlayer Mini MP3 module         | —                 | Have it  | Same module used in [arduino-laser-target][laser-target]      |
 | microSD card (≤32 GB, FAT32)     | —                 | Check    | Must be formatted FAT32; Turbo .mp3 file goes in /mp3/ folder |
-| Small speaker (4–8 Ω, 0.5–3 W)   | £2–3              | Check    | Connects to DFPlayer Mini's built-in 3W amp (SPK1/SPK2)     |
-| Breadboard + jumper wires        | —                 | Have it  |                                                             |
-| Micro-USB cable                  | —                 | Have it  | Power + flashing                                            |
-| ELM327 Bluetooth OBD2 dongle     | —                 | Have it  | Bluetooth Classic. [Manufacturer site][elm-home]            |
-| **Total new spend**              | **~£10**          |          | ESP32 + speaker (if needed)                                 |
+| Small speaker (4–8 Ω, 0.5–3 W)   | £2–3              | Check    | Connects to DFPlayer Mini's built-in 3W amp (SPK1/SPK2)       |
+| Breadboard + jumper wires        | —                 | Have it  |                                                               |
+| Micro-USB cable                  | —                 | Have it  | Power + flashing                                              |
+| ELM327 Bluetooth OBD2 dongle     | —                 | Have it  | Bluetooth Classic. [Manufacturer site][elm-home]              |
+| **Total new spend**              | **~£10**          |          | ESP32 + speaker (if needed)                                   |
 
 ### Hardware decisions (from planning session)
 
@@ -246,11 +246,11 @@ terminal. Each command ends with `\r`. Each response ends with `>`.
 OBD2 polling rate adapts to engine state to avoid unnecessary blocking
 and keep the rotary encoder responsive at all times.
 
-| Mode | RPM range | PIDs polled | Rate | Purpose |
-|---|---|---|---|---|
-| **Parked** | < 200 | `ATRV` (battery), `0105` (coolant), `010C` (RPM) | every 3 s | Engine off — show parked info screen |
-| **Idle** | 200–999 | `010C` (RPM) | every 500 ms | Engine running, not moving — no Turbo possible |
-| **Driving** | ≥ 1000 | `0111` (TPS), `010D` (speed), `010C` (RPM) | every 100 ms | Turbo trigger active |
+| Mode        | RPM range | PIDs polled                                      | Rate         | Purpose                                        |
+| ----------- | --------- | ------------------------------------------------ | ------------ | ---------------------------------------------- |
+| **Parked**  | < 200     | `ATRV` (battery), `0105` (coolant), `010C` (RPM) | every 3 s    | Engine off — show parked info screen           |
+| **Idle**    | 200–999   | `010C` (RPM)                                     | every 500 ms | Engine running, not moving — no Turbo possible |
+| **Driving** | ≥ 1000    | `0111` (TPS), `010D` (speed), `010C` (RPM)       | every 100 ms | Turbo trigger active                           |
 
 **Encoder priority:** when the rotary encoder is turned, OBD2 polling is
 suspended for 500 ms (`ENCODER_PRIORITY_MS`). The main loop runs freely
@@ -258,13 +258,13 @@ during this window so the display updates instantly on every detent.
 
 ### PID reference
 
-| PID    | Command  | Response   | Formula              | Range      |
-| ------ | -------- | ---------- | -------------------- | ---------- |
-| TPS    | `0111\r` | `4111XX`   | `XX × 100 / 255`     | 0–100 %    |
-| Speed  | `010D\r` | `410DXX`   | `XX`                 | 0–255 km/h |
-| RPM    | `010C\r` | `410CXXYY` | `(XX×256+YY) / 4`    | 0–16383    |
-| Coolant| `0105\r` | `4105XX`   | `XX − 40`            | −40–215 °C |
-| Battery| `ATRV\r` | `"12.4V"`  | parse float, V range | 6–16 V     |
+| PID     | Command  | Response   | Formula              | Range      |
+| ------- | -------- | ---------- | -------------------- | ---------- |
+| TPS     | `0111\r` | `4111XX`   | `XX × 100 / 255`     | 0–100 %    |
+| Speed   | `010D\r` | `410DXX`   | `XX`                 | 0–255 km/h |
+| RPM     | `010C\r` | `410CXXYY` | `(XX×256+YY) / 4`    | 0–16383    |
+| Coolant | `0105\r` | `4105XX`   | `XX − 40`            | −40–215 °C |
+| Battery | `ATRV\r` | `"12.4V"`  | parse float, V range | 6–16 V     |
 
 ### Gear calculation
 
@@ -272,13 +272,13 @@ OBD2 does not expose gear directly. Estimated from the RPM ÷ speed ratio
 inside `estimateGear()`. Approximate thresholds for the Mercedes CLA180:
 
 | Ratio (RPM ÷ km/h) | Gear |
-|---|---|
-| > 110 | 1 |
-| > 65  | 2 |
-| > 43  | 3 |
-| > 30  | 4 |
-| > 22  | 5 |
-| ≤ 22  | 6 |
+| ------------------ | ---- |
+| > 110              | 1    |
+| > 65               | 2    |
+| > 43               | 3    |
+| > 30               | 4    |
+| > 22               | 5    |
+| ≤ 22               | 6    |
 
 Calibrate by driving steadily in each gear and logging the ratio from the
 serial monitor (`[Turbo]` lines show gear at trigger time).
@@ -412,20 +412,20 @@ and the speaker plays the Turbo sound on demand.
 
 ## 11. Risks and gotchas
 
-| Risk                                    | Mitigation                                                                                                         |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Cheap ELM327 clones have buggy firmware | Test `ATZ` early — should return `ELM327 v1.5`. If garbage, swap the dongle.                                       |
-| Bluetooth pairing fiddly first time     | Use `discover()` API with 8 s scan. All retry logic is automatic.                                                  |
-| Some cars don't support some PIDs       | Send `0100` first — bitmap of supported PIDs. Only poll supported ones.                                            |
-| Polling too fast → `NO DATA` responses  | Cap at 10 Hz total across 3 PIDs. Use `ATAT1` for adaptive timing.                                                 |
-| `\r` vs `\r\n` mismatch with ELM327     | Always send `\r` only; wait for `>` before sending next command.                                                   |
-| OLED flicker                            | Use U8g2 full-buffer mode (`_F_`).                                                                                 |
-| ESP32 brown-out during engine crank     | Power from a buffered USB socket; add capacitor on 5V rail.                                                        |
-| ATZ takes up to 3 s                     | Use 3000 ms timeout for ATZ; 1000 ms for all other AT commands.                                                    |
-| DFPlayer busy / sound cut short         | Check BUSY pin (DFPlayer GPIO 16) before triggering next sound; respect cooldown timer.                            |
-| Turbo triggers too eagerly or not enough  | Tune the four `TURBO_*` threshold constants after first real-car test.                                               |
-| G-force shows ~1 g at rest              | Subtract gravity (≈9.81 m/s²) from Z-axis before display.                                                          |
-| Manual gearbox — no clutch PID on OBD2  | Throttle-drop detection is the trigger (driver lifts off when pressing clutch). No need to detect clutch directly. |
+| Risk                                     | Mitigation                                                                                                         |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Cheap ELM327 clones have buggy firmware  | Test `ATZ` early — should return `ELM327 v1.5`. If garbage, swap the dongle.                                       |
+| Bluetooth pairing fiddly first time      | Use `discover()` API with 8 s scan. All retry logic is automatic.                                                  |
+| Some cars don't support some PIDs        | Send `0100` first — bitmap of supported PIDs. Only poll supported ones.                                            |
+| Polling too fast → `NO DATA` responses   | Cap at 10 Hz total across 3 PIDs. Use `ATAT1` for adaptive timing.                                                 |
+| `\r` vs `\r\n` mismatch with ELM327      | Always send `\r` only; wait for `>` before sending next command.                                                   |
+| OLED flicker                             | Use U8g2 full-buffer mode (`_F_`).                                                                                 |
+| ESP32 brown-out during engine crank      | Power from a buffered USB socket; add capacitor on 5V rail.                                                        |
+| ATZ takes up to 3 s                      | Use 3000 ms timeout for ATZ; 1000 ms for all other AT commands.                                                    |
+| DFPlayer busy / sound cut short          | Check BUSY pin (DFPlayer GPIO 16) before triggering next sound; respect cooldown timer.                            |
+| Turbo triggers too eagerly or not enough | Tune the four `TURBO_*` threshold constants after first real-car test.                                             |
+| G-force shows ~1 g at rest               | Subtract gravity (≈9.81 m/s²) from Z-axis before display.                                                          |
+| Manual gearbox — no clutch PID on OBD2   | Throttle-drop detection is the trigger (driver lifts off when pressing clutch). No need to detect clutch directly. |
 
 ---
 
@@ -464,7 +464,20 @@ and the speaker plays the Turbo sound on demand.
 
 ### Testing tools
 
-- **ELM327 emulator (test without a car):** https://github.com/Ircama/ELM327-emulator
+Four layers — run in order, see the Testing section in README.md for full commands.
+
+| Layer            | Command                      | What it checks                                              | Hardware needed |
+| ---------------- | ---------------------------- | ----------------------------------------------------------- | --------------- |
+| Unit tests       | `make test-unit`             | parse_pid, estimate_gear, TurboTrigger logic, all scenarios | None            |
+| Visual monitor   | `make scenario`              | Trigger timing and sequence, threshold tuning               | None            |
+| Wokwi simulation | `make wokwi-build` + VS Code | Compiled firmware, OLED display, encoder                    | None            |
+| Serial Monitor   | Flash → Arduino IDE          | Full OBD2 + BT stack, real triggers, gear calibration       | ESP32 via USB   |
+
+- **ELM327 emulator (integration tests without a car):** https://github.com/Ircama/ELM327-emulator
+  — used by `make test-emulator` via `tests/integration/mock_elm327.py`
+- **Python test mirror:** `tests/obd_logic.py` mirrors all C++ logic; keep in sync when changing constants
+- **Gear calibration:** drive in each gear at steady speed, note `[OBD] RPM=... Speed=...` in Serial Monitor,
+  compute ratio = RPM ÷ km/h, update thresholds in `estimateGear()` and `tests/obd_logic.py`
 
 ---
 
