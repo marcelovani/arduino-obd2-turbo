@@ -54,7 +54,7 @@ FQBN           := esp32:esp32:esp32doit-devkit-v1
 # ─── help ────────────────────────────────────────────────────────────────────
 help:
 	@echo ""
-	@echo "  make build            Install Python dependencies"
+	@echo "  make build            Install Python dependencies + git hooks"
 	@echo "  make test             Run all tests"
 	@echo "  make test-unit        Unit tests only (no emulator)"
 	@echo "  make test-emulator    Integration tests via mock ELM327 server"
@@ -72,6 +72,7 @@ build: $(VENV)
 	@echo "→ Installing Python dependencies..."
 	$(VENV_PIP) install --quiet --upgrade pip
 	$(VENV_PIP) install --quiet -r requirements.txt
+	@if [ -f .github/scripts/setup_hooks.sh ]; then .github/scripts/setup_hooks.sh; fi
 	@echo "✓ Build complete. Run: make test"
 
 $(VENV):
@@ -137,6 +138,8 @@ scenarios: $(VENV)
 #
 # For direct Python testing, the mock server (make test-emulator) is faster.
 emulator: $(VENV)
+	@echo "→ Installing ELM327-emulator (required for this target only)..."
+	$(VENV_PIP) install --quiet --no-build-isolation setuptools ELM327-emulator pyserial
 	@echo "Starting ELM327-emulator..."
 	@echo "Press Ctrl+C to stop."
 	@echo ""
