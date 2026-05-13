@@ -219,10 +219,10 @@ void readEncoder() {
 void showMessage(const char* line1, const char* line2 = nullptr, const char* line3 = nullptr) {
   display.clearBuffer();
   display.setFont(u8g2_font_ncenB10_tr);
-  display.drawStr(0, 18, line1);
+  display.drawStr(0, 28, line1);
   display.setFont(u8g2_font_ncenB08_tr);
-  if (line2) display.drawStr(0, 34, line2);
-  if (line3) display.drawStr(0, 50, line3);
+  if (line2) display.drawStr(0, 44, line2);
+  if (line3) display.drawStr(0, 59, line3);
   display.sendBuffer();
 }
 
@@ -232,21 +232,20 @@ void drawParked(const char* deviceName) {
 
   char nameBuf[18];
   strncpy(nameBuf, deviceName, 17); nameBuf[17] = '\0';
-  display.drawStr(0, 10, nameBuf);
-  display.drawHLine(0, 13, 128);
+  display.drawStr(0, 25, nameBuf);
 
   char buf[24];
   if (metricVoltage > 0) {
     snprintf(buf, sizeof(buf), "Battery:  %.1f V", metricVoltage);
-    display.drawStr(0, 27, buf);
+    display.drawStr(0, 37, buf);
   }
   if (metricCoolant > -999) {
     snprintf(buf, sizeof(buf), "Coolant:  %.0f C", metricCoolant);
-    display.drawStr(0, 40, buf);
+    display.drawStr(0, 49, buf);
   }
 
   if ((millis() / 600) % 2 == 0)
-    display.drawStr(0, 56, "Start engine...");
+    display.drawStr(0, 61, "Start engine...");
 
   display.sendBuffer();
 }
@@ -440,10 +439,10 @@ void doScanning() {
   scanFrame++;
   display.clearBuffer();
   display.setFont(u8g2_font_ncenB10_tr);
-  display.drawStr(0, 20, line1);
+  display.drawStr(0, 28, line1);
   display.setFont(u8g2_font_ncenB08_tr);
-  display.drawStr(0, 38, "Plug ELM327 into");
-  display.drawStr(0, 52, "OBD2 port & wait");
+  display.drawStr(0, 44, "Plug ELM327 into");
+  display.drawStr(0, 59, "OBD2 port & wait");
   display.sendBuffer();
 
   Serial.println("Scanning for ELM327...");
@@ -503,13 +502,13 @@ void doInitElm() {
 
   display.clearBuffer();
   display.setFont(u8g2_font_ncenB10_tr);
-  display.drawStr(0, 18, "OBD2 connected!");
+  display.drawStr(0, 28, "OBD2 connected!");
   display.setFont(u8g2_font_ncenB08_tr);
-  display.drawStr(0, 32, nameBuf);
+  display.drawStr(0, 44, nameBuf);
   if (metricVoltage > 0) {
     char vbuf[20];
     snprintf(vbuf, sizeof(vbuf), "Battery: %.1f V", metricVoltage);
-    display.drawStr(0, 48, vbuf);
+    display.drawStr(0, 59, vbuf);
   }
   display.sendBuffer();
   delay(1500);
@@ -576,13 +575,13 @@ void setup() {
   display.begin();
   display.setFont(u8g2_font_5x7_tr);
   display.clearBuffer();
-  display.drawStr(0, 20, "Turbo Emulator");
+  display.drawStr(0, 28, "Turbo Emulator");
 #ifdef SIMULATION
-  display.drawStr(0, 32, "Wokwi simulation");
+  display.drawStr(0, 44, "Wokwi simulation");
 #else
-  display.drawStr(0, 32, "OBD2 v1.0");
+  display.drawStr(0, 44, "OBD2 v1.0");
 #endif
-  display.drawStr(0, 44, "Starting...");
+  display.drawStr(0, 59, "Starting...");
   display.sendBuffer();
 
   pinMode(PIN_ENC_CLK, INPUT_PULLUP);
@@ -629,9 +628,9 @@ void loop() {
         snprintf(line1, sizeof(line1), "Scanning OBD2... %c", SPIN[(now / 150) % 4]);
         display.clearBuffer();
         display.setFont(u8g2_font_ncenB10_tr);
-        display.drawStr(0, 20, line1);
+        display.drawStr(0, 28, line1);
         display.setFont(u8g2_font_ncenB08_tr);
-        display.drawStr(0, 38, "Looking for ELM327");
+        display.drawStr(0, 44, "Looking for ELM327");
         display.sendBuffer();
         lastDrawMs = now;
       }
@@ -665,12 +664,12 @@ void loop() {
         } else {
           display.clearBuffer();
           display.setFont(u8g2_font_ncenB10_tr);
-          display.drawStr(0, 18, "OBD2 connected!");
+          display.drawStr(0, 28, "OBD2 connected!");
           display.setFont(u8g2_font_ncenB08_tr);
-          display.drawStr(0, 32, "ELM327-SIM");
+          display.drawStr(0, 44, "ELM327-SIM");
           char vbuf[20];
           snprintf(vbuf, sizeof(vbuf), "Battery: %.1f V", metricVoltage);
-          display.drawStr(0, 48, vbuf);
+          display.drawStr(0, 59, vbuf);
           display.sendBuffer();
         }
         lastDrawMs = now;
