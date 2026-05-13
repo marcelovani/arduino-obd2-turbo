@@ -333,25 +333,31 @@ void drawDisplay() {
 #ifdef SIMULATION
 
 // {time_ms, tps%, rpm, speed_kmh}
-// Starts with 2s engine-off (parked screen), then engine starts and drives.
-// Two Turbo triggers expected: at ~4800ms (1st→2nd) and ~7000ms (2nd→3rd).
+// Full cycle (~20s):
+//   0–3s   ignition on, engine off  → parked screen
+//   3–8s   engine idling, not moving → idle screen (RPM 200–999)
+//   8–15s  driving 1st → 2nd → 3rd  → two Turbo triggers
+//   15–20s stopped, engine idle      → idle screen
+// Turbo #1 at ~10300ms (1st→2nd), Turbo #2 at ~12500ms (2nd→3rd)
 struct DataPoint { uint32_t t; float tps; float rpm; float speed; };
 static const DataPoint SCENARIO[] = {
-  {    0,  0,    0,  0  },  // engine off → parked screen
-  { 2000,  0,  800,  0  },  // engine starts → gauge screen
-  { 2800, 30, 1500, 10  },  // pulling away in 1st
-  { 3500, 75, 2800, 20  },  // accelerating hard
-  { 4200, 85, 3300, 26  },  // near red-line 1st gear
-  { 4800,  4, 3200, 28  },  // *** Turbo #1 *** (1st→2nd)
-  { 5000, 55, 2400, 33  },  // back on throttle in 2nd
-  { 5600, 80, 3100, 42  },  // hard acceleration in 2nd
-  { 6300, 85, 3500, 46  },  // near red-line 2nd gear
-  { 7000,  4, 3300, 48  },  // *** Turbo #2 *** (2nd→3rd)
-  { 7200, 45, 2200, 55  },  // into 3rd, steady throttle
-  { 8000, 60, 2700, 62  },  // cruising 3rd — no Turbo
-  { 9000,  3, 2500, 65  },  // lift in 3rd — no Turbo (gear > max_gear)
-  {10000,  0, 1000, 30  },  // braking
-  {11000,  0,  800,  0  },  // back to idle — loop restarts
+  {     0,  0,    0,   0 },  // ignition on, engine off → parked screen
+  {  3000,  0,    0,   0 },  // end of ignition-on window
+  {  3100,  0,  750,   0 },  // engine cranks → idle screen appears (RPM 200-999)
+  {  8000,  0,  850,   0 },  // 5s idling — rotary fully responsive
+  {  8500, 40, 1600,   8 },  // pull away in 1st — driving mode starts
+  {  9200, 80, 3000,  22 },  // hard acceleration 1st
+  {  9800, 85, 3400,  27 },  // near red-line 1st
+  { 10300,  4, 3200,  30 },  // *** Turbo #1 *** (1st→2nd)
+  { 10500, 55, 2500,  35 },  // back on throttle 2nd
+  { 11200, 80, 3100,  44 },  // hard acceleration 2nd
+  { 11900, 85, 3500,  50 },  // near red-line 2nd
+  { 12500,  4, 3300,  52 },  // *** Turbo #2 *** (2nd→3rd)
+  { 12700, 45, 2200,  58 },  // into 3rd
+  { 13500, 40, 2600,  66 },  // cruising 3rd
+  { 14200,  0, 1800,  55 },  // lift in 3rd — no Turbo (gear 3 > max)
+  { 15000,  0,  850,   0 },  // braked to stop → idle screen
+  { 20000,  0,  800,   0 },  // 5s idle then loop
 };
 static const int SCENARIO_LEN = sizeof(SCENARIO) / sizeof(SCENARIO[0]);
 
@@ -360,9 +366,9 @@ void advanceScenario() {
   while (scenIdx + 1 < SCENARIO_LEN - 1 && SCENARIO[scenIdx + 1].t <= elapsed)
     scenIdx++;
   if (elapsed >= SCENARIO[SCENARIO_LEN - 1].t) {
-    // Loop back to the first engine-running point (skip engine-off intro)
-    scenIdx   = 1;
-    scenStart = millis() - SCENARIO[1].t;
+    // Restart full cycle from the beginning
+    scenIdx   = 0;
+    scenStart = millis();
     prevTPS   = 0;
     return;
   }
