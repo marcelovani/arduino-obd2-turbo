@@ -132,7 +132,7 @@ Simulated hardware (replaces real-device peripherals under `#ifdef SIMULATION`):
 
 **Option A — wokwi.com (browser, no compilation needed)**
 
-1. Go to [wokwi.com](https://wokwi.com) and create a new ESP32 project
+1. Go to [wokwi.com](https://wokwi.com/projects/463843555678407681) and create a new ESP32 project
 2. Copy `diagram.json`, `libraries.txt` from `Emulators/Wokwi/` and
    `sketches/turbo/turbo.ino` into the project (rename to `sketch.ino`)
 3. In the wokwi.com editor, add `-DSIMULATION` to the compile flags
