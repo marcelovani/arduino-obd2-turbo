@@ -129,16 +129,18 @@ uint32_t lastDrawMs     = 0;
 #endif
 
 // ── Gear estimation ───────────────────────────────────────────────────────
-// RPM/speed ratio thresholds tuned for a small European petrol car.
+// RPM/speed ratio thresholds. These are rough defaults; calibrate for your
+// specific car by driving steadily in each gear and logging RPM/speed from
+// the serial monitor. Target speeds: gear 1 ≈ 0-40 mph, gear 2 ≈ 40-60 mph.
 int estimateGear(float rpm, float speed) {
   if (speed < 2.0f || rpm < 100.0f) return 0;
   float ratio = rpm / speed;
-  if      (ratio > 110.0f) return 1;
-  else if (ratio >  65.0f) return 2;
-  else if (ratio >  43.0f) return 3;
-  else if (ratio >  30.0f) return 4;
-  else if (ratio >  22.0f) return 5;
-  else                     return 6;
+  if      (ratio > 50.0f) return 1;
+  else if (ratio > 33.0f) return 2;
+  else if (ratio > 19.0f) return 3;
+  else if (ratio > 12.0f) return 4;
+  else if (ratio >  8.0f) return 5;
+  else                    return 6;
 }
 
 // ── Turbo trigger ─────────────────────────────────────────────────────────
@@ -279,12 +281,17 @@ void drawDisplay() {
 
   // ── Yellow zone header (y=0–15) ──────────────────────────────────────────
   display.setFont(u8g2_font_ncenB08_tr);
-  char hdr[28];
-  if (turboRecent)
-    snprintf(hdr, sizeof(hdr), "PSSSSH! #%lu", turboCount);
-  else
-    snprintf(hdr, sizeof(hdr), "Turbo:%-2lu  Gear:%d", turboCount, gear);
-  display.drawStr(0, 11, hdr);
+  if (turboRecent) {
+    char buf[20];
+    snprintf(buf, sizeof(buf), "PSSSSH! #%lu", turboCount);
+    display.drawStr(0, 11, buf);
+  } else {
+    char tStr[16], gStr[12];
+    snprintf(tStr, sizeof(tStr), "Turbo: %lu", turboCount);
+    snprintf(gStr, sizeof(gStr), "Gear: %d", gear);
+    display.drawStr(0, 11, tStr);
+    display.drawStr(128 - display.getStrWidth(gStr), 11, gStr);
+  }
 
   // ── Blue zone (y=16–63) ──────────────────────────────────────────────────
   display.setFont(u8g2_font_5x7_tr);
@@ -323,31 +330,49 @@ void drawDisplay() {
 #ifdef SIMULATION
 
 // {time_ms, tps%, rpm, speed_kmh}
-// Full cycle (~20s):
-//   0–3s   ignition on, engine off  → parked screen
-//   3–8s   engine idling, not moving → idle screen (RPM 200–999)
-//   8–15s  driving 1st → 2nd → 3rd  → two Turbo triggers
-//   15–20s stopped, engine idle      → idle screen
-// Turbo #1 at ~10300ms (1st→2nd), Turbo #2 at ~12500ms (2nd→3rd)
+// Full cycle (~24s):
+//   0–3s    ignition on, engine off   → parked screen
+//   3–8s    engine idle, not moving   → idle screen
+//   8–19s   driving: 1st→2nd→3rd→4th → two Turbo triggers
+//   19–24s  stopped, engine idle      → idle screen → loop
+//
+// Turbo #1 at ~9.5s (1st→2nd), Turbo #2 at ~12.5s (2nd→3rd)
+// TPS hold for 200ms after each lift-off guarantees a 100ms checkpoint lands
+// while prevTPS is high and currentTPS is low.
+//
+// Gear thresholds (ratio = RPM / km/h):  >50=1st  >33=2nd  >19=3rd  >12=4th
 struct DataPoint { uint32_t t; float tps; float rpm; float speed; };
 static const DataPoint SCENARIO[] = {
-  {     0,  0,    0,   0 },  // ignition on, engine off → parked screen
-  {  3000,  0,    0,   0 },  // end of ignition-on window
-  {  3100,  0,  750,   0 },  // engine cranks → idle screen appears (RPM 200-999)
-  {  8000,  0,  850,   0 },  // 5s idling — rotary fully responsive
-  {  8500, 40, 1600,   8 },  // pull away in 1st — driving mode starts
-  {  9200, 80, 3000,  22 },  // hard acceleration 1st
-  {  9800, 85, 3400,  27 },  // near red-line 1st — prevTPS will be 85
-  {  9801,  4, 3200,  30 },  // *** Turbo #1 *** instant drop (1ms gap)
-  { 10000, 55, 2500,  35 },  // back on throttle 2nd
-  { 11200, 80, 3100,  44 },  // hard acceleration 2nd
-  { 11900, 85, 3500,  50 },  // near red-line 2nd — prevTPS will be 85
-  { 11901,  4, 3300,  52 },  // *** Turbo #2 *** instant drop (1ms gap)
-  { 12100, 45, 2200,  58 },  // into 3rd
-  { 13000, 40, 2600,  66 },  // cruising 3rd
-  { 13800,  0, 1800,  55 },  // lift in 3rd — no Turbo (gear 3 > max)
-  { 15000,  0,  850,   0 },  // braked to stop → idle screen
-  { 20000,  0,  800,   0 },  // 5s idle then loop
+  // ── Parked ────────────────────────────────────────────────────────────────
+  {     0,  0,    0,    0 },  // ignition on, engine off → parked screen
+  {  3000,  0,    0,    0 },  // end of ignition-on window
+  {  3100,  0,  750,    0 },  // engine cranks → idle screen (RPM 200–999)
+  {  8000,  0,  850,    0 },  // 5s idle — rotary fully responsive
+
+  // ── 1st gear: quick throttle, 0→64 km/h (40 mph) in ~1.5s ───────────────
+  {  8200, 85, 1200,    2 },  // snap to throttle
+  {  9500, 90, 3400,   60 },  // near redline  (ratio=57 → gear 1)
+  {  9501,  4, 3300,   60 },  // *** Turbo #1 *** instant lift-off
+  {  9700,  4, 3200,   62 },  // hold TPS low 200ms (ensures trigger fires)
+
+  // ── 2nd gear: quick throttle, 64→97 km/h (40→60 mph) in ~2.8s ───────────
+  {  9900, 85, 2600,   65 },  // back on throttle  (ratio=40 → gear 2)
+  { 12500, 88, 3300,   90 },  // near redline  (ratio=37 → gear 2)
+  { 12501,  4, 3200,   90 },  // *** Turbo #2 *** instant lift-off
+  { 12700,  4, 3100,   92 },  // hold TPS low 200ms
+
+  // ── 3rd gear: moderate throttle, 97→145 km/h (60→90 mph) in 3s ──────────
+  { 12900, 50, 2200,   96 },  // back on throttle  (ratio=23 → gear 3)
+  { 15900, 45, 2800,  140 },  // cruising  (ratio=20 → gear 3)
+
+  // ── 4th gear: light throttle, 145→161 km/h (90→100 mph) in ~2s ──────────
+  { 16000, 28, 2200,  145 },  // shift to 4th  (ratio=15 → gear 4)
+  { 17900, 25, 2400,  161 },  // 100 mph  (ratio=15 → gear 4)
+
+  // ── Stop ──────────────────────────────────────────────────────────────────
+  { 18500,  0, 1500,  100 },  // lift off and brake
+  { 19500,  0,  850,    0 },  // stopped → idle screen
+  { 24500,  0,  800,    0 },  // 5s idle then loop
 };
 static const int SCENARIO_LEN = sizeof(SCENARIO) / sizeof(SCENARIO[0]);
 

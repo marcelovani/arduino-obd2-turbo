@@ -68,14 +68,14 @@ def estimate_gear(rpm: float, speed_kmh: float) -> int:
       Gear 6: ratio ~22–28
     These are rough — update from serial monitor logs in Phase 5.
     """
-    if speed_kmh < 2 or rpm < 500:
+    if speed_kmh < 2 or rpm < 100:
         return 0
     ratio = rpm / speed_kmh
-    if ratio > 120: return 1
-    if ratio > 70:  return 2
-    if ratio > 50:  return 3
-    if ratio > 35:  return 4
-    if ratio > 25:  return 5
+    if ratio > 50: return 1
+    if ratio > 33: return 2
+    if ratio > 19: return 3
+    if ratio > 12: return 4
+    if ratio >  8: return 5
     return 6
 
 
