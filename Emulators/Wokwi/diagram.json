@@ -25,6 +25,13 @@
       "attrs": {}
     },
     {
+      "type": "wokwi-buzzer",
+      "id": "buzzer",
+      "top": 60,
+      "left": 472.2,
+      "attrs": {}
+    },
+    {
       "type": "wokwi-resistor",
       "id": "r1",
       "top": 148.25,
@@ -35,7 +42,7 @@
     {
       "type": "wokwi-led",
       "id": "led",
-      "top": 60,
+      "top": 148.25,
       "left": 472.2,
       "attrs": { "color": "red" }
     }
@@ -50,10 +57,12 @@
     ["enc:CLK", "esp:D25", "orange", []],
     ["enc:DT", "esp:D26", "purple", []],
     ["enc:SW", "esp:D27", "yellow", []],
-    ["esp:TX2", "r1:2", "cyan", []],
+    ["enc:VCC", "esp:3V3", "red", ["h201.6", "v38.8"]],
+    ["esp:TX2", "buzzer:+", "cyan", []],
+    ["buzzer:-", "esp:GND.2", "black", []],
+    ["esp:D2", "r1:2", "green", []],
     ["r1:1", "led:A", "red", []],
     ["led:K", "esp:GND.2", "black", []],
-    ["enc:VCC", "esp:3V3", "red", ["h201.6", "v38.8"]],
     ["led:C", "esp:GND.1", "black", ["v0"]]
   ],
   "dependencies": {}

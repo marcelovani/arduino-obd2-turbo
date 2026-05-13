@@ -12,7 +12,7 @@
 //   ELM327 dongle  — Bluetooth Classic, OBD2 port
 //
 // Hardware (Wokwi simulation):
-//   SSD1306 OLED, KY-040 encoder, LED on GPIO17
+//   SSD1306 OLED, KY-040 encoder, buzzer on GPIO17, LED on GPIO2
 //   OBD2 data replayed from a built-in scenario.
 //
 // Encoder: rotate = cycle views, click = reset counter (sim) / disconnect BT (device)
@@ -32,7 +32,8 @@
 #define PIN_ENC_SW   27
 
 #ifdef SIMULATION
-  #define PIN_LED     17   // blinks while MP3 would play
+  #define PIN_BUZZER  17   // passive buzzer — beeps when Turbo fires (TX2)
+  #define PIN_LED      2   // LED — blinks while Turbo sound plays
 #else
   #define PIN_DFP_RX  16
   #define PIN_DFP_TX  17
@@ -164,6 +165,7 @@ void checkTurbo(uint32_t now) {
     turboUntilMs = now + 800;
 #ifdef SIMULATION
     turboSoundUntilMs = now + 1000;
+    tone(PIN_BUZZER, 900, 350);
 #else
     dfplayer.volume(gear == 1 ? TURBO_VOLUME_GEAR1 : TURBO_VOLUME_GEAR2);
     dfplayer.play(1);
@@ -595,6 +597,8 @@ void setup() {
 #endif
 
 #ifdef SIMULATION
+  pinMode(PIN_BUZZER, OUTPUT);
+  digitalWrite(PIN_BUZZER, LOW);
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, LOW);
   delay(800);
