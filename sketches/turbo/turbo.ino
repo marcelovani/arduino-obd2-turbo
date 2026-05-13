@@ -142,6 +142,14 @@ int estimateGear(float rpm, float speed) {
 
 // ── Turbo trigger ─────────────────────────────────────────────────────────
 void checkTurbo(uint32_t now) {
+#ifdef SIMULATION
+  // Rate-limit to 100ms to match real device OBD2 poll rate.
+  // Without this, prevTPS updates every frame and the high→low condition
+  // is never simultaneously true across a single "tick".
+  static uint32_t lastCheckMs = 0;
+  if (now - lastCheckMs < 100) return;
+  lastCheckMs = now;
+#endif
   int gear = estimateGear(metricRPM, metricSpeed);
   if (prevTPS       > TURBO_THROTTLE_HIGH &&
       metricTPS     < TURBO_THROTTLE_LOW  &&
@@ -347,15 +355,15 @@ static const DataPoint SCENARIO[] = {
   {  8000,  0,  850,   0 },  // 5s idling — rotary fully responsive
   {  8500, 40, 1600,   8 },  // pull away in 1st — driving mode starts
   {  9200, 80, 3000,  22 },  // hard acceleration 1st
-  {  9800, 85, 3400,  27 },  // near red-line 1st
-  { 10300,  4, 3200,  30 },  // *** Turbo #1 *** (1st→2nd)
-  { 10500, 55, 2500,  35 },  // back on throttle 2nd
+  {  9800, 85, 3400,  27 },  // near red-line 1st — prevTPS will be 85
+  {  9801,  4, 3200,  30 },  // *** Turbo #1 *** instant drop (1ms gap)
+  { 10000, 55, 2500,  35 },  // back on throttle 2nd
   { 11200, 80, 3100,  44 },  // hard acceleration 2nd
-  { 11900, 85, 3500,  50 },  // near red-line 2nd
-  { 12500,  4, 3300,  52 },  // *** Turbo #2 *** (2nd→3rd)
-  { 12700, 45, 2200,  58 },  // into 3rd
-  { 13500, 40, 2600,  66 },  // cruising 3rd
-  { 14200,  0, 1800,  55 },  // lift in 3rd — no Turbo (gear 3 > max)
+  { 11900, 85, 3500,  50 },  // near red-line 2nd — prevTPS will be 85
+  { 11901,  4, 3300,  52 },  // *** Turbo #2 *** instant drop (1ms gap)
+  { 12100, 45, 2200,  58 },  // into 3rd
+  { 13000, 40, 2600,  66 },  // cruising 3rd
+  { 13800,  0, 1800,  55 },  // lift in 3rd — no Turbo (gear 3 > max)
   { 15000,  0,  850,   0 },  // braked to stop → idle screen
   { 20000,  0,  800,   0 },  // 5s idle then loop
 };
