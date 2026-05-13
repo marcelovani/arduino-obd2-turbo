@@ -456,10 +456,10 @@ void doRunning() {
   if (metricRPM < ENGINE_IDLE_RPM) {
     // Engine off — slow-poll voltage/coolant, show parked screen
     if (now - lastIdlePollMs >= 3000) {
-      String r;
-      r = obdSend("ATRV", 1500);       metricVoltage = parseVoltage(r);
-      r = obdSend("0105", 1000);  { float v = parsePID(r, 1, 1.0f); if (v >= 0) metricCoolant = v - 40.0f; }
-      r = obdSend("010C", 1000);        metricRPM = max(0.0f, parsePID(r, 2, 0.25f));
+      String r; float v;
+      r = obdSend("ATRV", 1500); v = parseVoltage(r);          if (v > 0)   metricVoltage = v;
+      r = obdSend("0105", 1000); v = parsePID(r, 1, 1.0f);     if (v >= 0)  metricCoolant = v - 40.0f;
+      r = obdSend("010C", 1000); v = parsePID(r, 2, 0.25f);    if (v >= 0)  metricRPM     = v;
       lastIdlePollMs = now;
     }
     if (now - lastDrawMs >= 100) {
@@ -469,10 +469,10 @@ void doRunning() {
   } else {
     // Engine running — fast-poll drive metrics, show gauges
     if (now - lastPollMs >= 100) {
-      String r;
-      r = obdSend("0111"); metricTPS   = max(0.0f, parsePID(r, 1, 100.0f / 255.0f));
-      r = obdSend("010D"); metricSpeed = max(0.0f, parsePID(r, 1, 1.0f));
-      r = obdSend("010C"); metricRPM   = max(0.0f, parsePID(r, 2, 0.25f));
+      String r; float v;
+      r = obdSend("0111"); v = parsePID(r, 1, 100.0f / 255.0f); if (v >= 0) metricTPS   = v;
+      r = obdSend("010D"); v = parsePID(r, 1, 1.0f);             if (v >= 0) metricSpeed = v;
+      r = obdSend("010C"); v = parsePID(r, 2, 0.25f);             if (v >= 0) metricRPM   = v;
       checkTurbo(now);
       lastPollMs = now;
     }
