@@ -17,11 +17,14 @@ off the throttle while the turbo is still spinning. This creates the
 distinctive "pssssh" sound. This device detects that moment from OBD2 data:
 
 1. Connects to the car's OBD2 port via a Bluetooth ELM327 dongle
-2. Monitors throttle position and RPM at 10 Hz
-3. When throttle drops rapidly from high to low while RPM is in the boost
-   range (and in 1st or 2nd gear), it triggers a pre-recorded Turbo sound
-   through a small speaker
-4. Displays live gauges on a 0.96" OLED screen
+2. Polls OBD2 data at a rate that adapts to engine state:
+   - **Parked** (RPM < 200) — reads battery voltage, coolant temp, RPM every 3 s
+   - **Idle** (RPM 200–999) — reads RPM only every 500 ms; rotary encoder fully responsive
+   - **Driving** (RPM ≥ 1000) — reads throttle, speed, RPM every 100 ms
+3. When the rotary encoder is turned, OBD2 polling pauses for 500 ms so the screen updates instantly
+4. In driving mode, when throttle drops rapidly from high to low while RPM is in the
+   boost range (and in 1st or 2nd gear), it triggers a pre-recorded Turbo sound
+5. Displays live gauges on a 0.96" OLED screen — 4 views navigated with the rotary encoder
 
 **Target car:** Mercedes CLA180 (2011, gasoline)
 

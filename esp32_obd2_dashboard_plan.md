@@ -15,14 +15,13 @@ on a small OLED screen so the driver can see what's happening in real time.
 A portable device that:
 
 1. Connects via Bluetooth Classic to a generic ELM327 OBD2 dongle
-2. Reads live signals from the car:
-   - **Throttle position** (% pedal pressed)
-   - **Speed** (km/h)
-   - **RPM** (used for gear calculation and Turbo trigger)
-   - **Gear** (calculated from RPM ÷ speed ratio)
-3. Reads one signal from the ESP32 itself:
-   - **Acceleration** (G-force relative to 1g, from MPU6050 IMU)
-4. **Plays a Turbo sound** via DFPlayer Mini + speaker when:
+2. Reads live signals from the car via OBD2 (see three-tier polling in §7–9):
+   - **RPM** — engine state detection and gear calculation
+   - **Throttle position** — % pedal pressed (driving mode only)
+   - **Speed** — km/h, used for gear estimation (driving mode only)
+   - **Gear** — calculated from RPM ÷ speed ratio
+   - **Battery voltage** and **coolant temperature** — shown on parked screen
+3. **Plays a Turbo sound** via DFPlayer Mini + speaker when:
    - Throttle drops rapidly from high to low (driver lifted off / gear change)
    - RPM is aturboe the boost threshold (~1500 RPM)
    - Current gear is 1st or 2nd (configurable)
@@ -41,29 +40,36 @@ spinning). The escaping air makes the characteristic "pssssh" / "ksss"
 sound. This device detects that moment from OBD2 data and plays a
 pre-recorded Turbo sample through the speaker.
 
+The trigger is only active in **driving mode** (RPM ≥ 1000). Below that
+threshold, throttle and speed are not polled at all — there is no point
+checking for a gear-change lift-off at idle or with the engine off.
+
 ### Trigger algorithm
 
 ```
-every 100 ms (OBD poll cycle):
+every 100 ms (driving mode only — RPM ≥ 1000):
 
   if (throttle_prev  > TURBO_THROTTLE_HIGH   // was accelerating (e.g. >40%)
   AND throttle_now   < TURBO_THROTTLE_LOW    // now lifted off    (e.g. <10%)
   AND rpm_now        > TURBO_RPM_MIN         // in boost range    (e.g. >1500)
   AND current_gear  <= TURBO_MAX_GEAR        // 1st or 2nd gear
   AND time_since_last_turbo > TURBO_COOLDOWN): // not already playing
-      play Turbo sound
+      set volume: gear 1 → 30 (100%), gear 2 → 21 (70%)
+      play Turbo sound (/mp3/0001.mp3)
       record timestamp
 ```
 
 ### Tunable thresholds (constants in code)
 
-| Constant            | Default | Meaning                                    |
-| ------------------- | ------- | ------------------------------------------ |
-| `TURBO_THROTTLE_HIGH` | 40 %    | Throttle must have been aturboe this         |
-| `TURBO_THROTTLE_LOW`  | 10 %    | Throttle must now be below this            |
-| `TURBO_RPM_MIN`       | 1500    | Minimum RPM to trigger (in boost)          |
-| `TURBO_MAX_GEAR`      | 2       | Only trigger in gears ≤ this               |
+| Constant              | Default | Meaning                                      |
+| --------------------- | ------- | -------------------------------------------- |
+| `TURBO_THROTTLE_HIGH` | 40 %    | Throttle must have been above this           |
+| `TURBO_THROTTLE_LOW`  | 10 %    | Throttle must now be below this              |
+| `TURBO_RPM_MIN`       | 1500    | Minimum RPM to trigger (in boost)            |
+| `TURBO_MAX_GEAR`      | 2       | Only trigger in gears ≤ this                 |
 | `TURBO_COOLDOWN_MS`   | 2000 ms | Minimum gap between consecutive Turbo sounds |
+| `TURBO_VOLUME_GEAR1`  | 30      | DFPlayer volume (0–30) for 1st gear trigger  |
+| `TURBO_VOLUME_GEAR2`  | 21      | DFPlayer volume (0–30) for 2nd gear trigger  |
 
 These can be adjusted to taste once tested in the car.
 
@@ -199,14 +205,12 @@ These can be adjusted to taste once tested in the car.
 
 ### Libraries (Library Manager)
 
-| Library                   | Purpose                                          |
-| ------------------------- | ------------------------------------------------ |
-| `BluetoothSerial`         | Built into ESP32 core                            |
-| `U8g2`                    | OLED — use `U8G2_SSD1306_128X64_NONAME_F_HW_I2C` |
-| `DFRobotDFPlayerMini`     | DFPlayer Mini MP3 module driver                  |
-| `Bounce2`                 | KY-040 button debounce                           |
-| `Adafruit MPU6050`        | IMU driver                                       |
-| `Adafruit Unified Sensor` | Dependency of MPU6050 lib                        |
+| Library               | Purpose                                          |
+| --------------------- | ------------------------------------------------ |
+| `BluetoothSerial`     | Built into ESP32 core                            |
+| `U8g2`                | OLED — use `U8G2_SSD1306_128X64_NONAME_F_HW_I2C` |
+| `DFRobotDFPlayerMini` | DFPlayer Mini MP3 module driver                  |
+| `Bounce2`             | KY-040 button debounce                           |
 
 > **Note:** The [arduino-laser-target][laser-target] reference project uses
 > `U8glib` (older) and `DFRobotDFPlayerMini`. We use **U8g2** (same author,
@@ -237,20 +241,47 @@ terminal. Each command ends with `\r`. Each response ends with `>`.
 | `ATH0\r`  | Hide headers                        |
 | `ATSP0\r` | Auto-detect car protocol            |
 
-### Live queries (polling loop)
+### Live queries — three-tier polling strategy
 
-| PID      | Command  | Response   | Formula          | Range      |
-| -------- | -------- | ---------- | ---------------- | ---------- |
-| Throttle | `0111\r` | `4111XX`   | `XX × 100 / 255` | 0–100 %    |
-| Speed    | `010D\r` | `410DXX`   | `XX`             | 0–255 km/h |
-| RPM      | `010C\r` | `410CXXYY` | `(XX×256+YY)/4`  | 0–16383    |
+OBD2 polling rate adapts to engine state to avoid unnecessary blocking
+and keep the rotary encoder responsive at all times.
+
+| Mode | RPM range | PIDs polled | Rate | Purpose |
+|---|---|---|---|---|
+| **Parked** | < 200 | `ATRV` (battery), `0105` (coolant), `010C` (RPM) | every 3 s | Engine off — show parked info screen |
+| **Idle** | 200–999 | `010C` (RPM) | every 500 ms | Engine running, not moving — no Turbo possible |
+| **Driving** | ≥ 1000 | `0111` (TPS), `010D` (speed), `010C` (RPM) | every 100 ms | Turbo trigger active |
+
+**Encoder priority:** when the rotary encoder is turned, OBD2 polling is
+suspended for 500 ms (`ENCODER_PRIORITY_MS`). The main loop runs freely
+during this window so the display updates instantly on every detent.
+
+### PID reference
+
+| PID    | Command  | Response   | Formula              | Range      |
+| ------ | -------- | ---------- | -------------------- | ---------- |
+| TPS    | `0111\r` | `4111XX`   | `XX × 100 / 255`     | 0–100 %    |
+| Speed  | `010D\r` | `410DXX`   | `XX`                 | 0–255 km/h |
+| RPM    | `010C\r` | `410CXXYY` | `(XX×256+YY) / 4`    | 0–16383    |
+| Coolant| `0105\r` | `4105XX`   | `XX − 40`            | −40–215 °C |
+| Battery| `ATRV\r` | `"12.4V"`  | parse float, V range | 6–16 V     |
 
 ### Gear calculation
 
-OBD2 does not expose gear directly. Calculated from RPM ÷ speed ratio.
-For the **Mercedes CLA180 (2011, gasoline)** gear ratios will be calibrated
-empirically — drive steadily in each gear and log the `RPM/speed` plateau.
-v0 shows the raw ratio; v1 maps it to a gear number.
+OBD2 does not expose gear directly. Estimated from the RPM ÷ speed ratio
+inside `estimateGear()`. Approximate thresholds for the Mercedes CLA180:
+
+| Ratio (RPM ÷ km/h) | Gear |
+|---|---|
+| > 110 | 1 |
+| > 65  | 2 |
+| > 43  | 3 |
+| > 30  | 4 |
+| > 22  | 5 |
+| ≤ 22  | 6 |
+
+Calibrate by driving steadily in each gear and logging the ratio from the
+serial monitor (`[Turbo]` lines show gear at trigger time).
 
 ---
 
@@ -260,22 +291,35 @@ v0 shows the raw ratio; v1 maps it to a gear number.
 [BOOT]
   │
   ▼
-[SCANNING]  ──── auto-scans BT, shows "Scanning…" on OLED
-  │                 connects automatically on ELM/OBD/LINK name match
+[SCANNING]   ── auto-scans BT, spinner on OLED
+  │               connects automatically on ELM/OBD/LINK name match
   ▼
-[CONNECTING] ───── "Connecting to <name>…"
-  │                  failure → SCANNING
+[CONNECTING] ── "Found: <name> / Connecting…"
+  │               failure → SCANNING
   ▼
-[INIT_ELM]  ────── AT command sequence, "Initialising…"
-  │                  failure → SCANNING
+[INIT_ELM]   ── AT command sequence (ATZ, ATE0, ATL0, ATS0, ATH0, ATSP0)
+  │               reads battery voltage, shows "OBD2 connected!" screen
+  │               failure → SCANNING
   ▼
-[RUNNING]   ────── live gauges + Turbo trigger active
-               rotate encoder → cycle views:
-                 1. Throttle (large) + Speed
-                 2. Speed (large) + RPM
-                 3. All metrics (text)
-                 4. G-force
-               click encoder → disconnect, back to SCANNING
+[RUNNING]    ── polling mode determined by RPM:
+  │
+  ├─ RPM < 200   (PARKED)
+  │    poll: battery + coolant + RPM every 3 s
+  │    display: parked info screen (battery V, coolant °C, "Start engine…")
+  │
+  ├─ RPM 200–999 (IDLE)
+  │    poll: RPM only every 500 ms
+  │    display: 4 gauge views (rotary fully responsive)
+  │
+  └─ RPM ≥ 1000  (DRIVING)
+       poll: TPS + speed + RPM every 100 ms
+       Turbo trigger active
+       encoder priority: OBD2 pauses 500 ms on encoder turn
+       display: 4 gauge views
+
+Encoder (in all RUNNING sub-states):
+  rotate → cycle 4 views: Throttle / Speed / All metrics / Dual bars
+  click  → disconnect Bluetooth, return to SCANNING
 ```
 
 ---
@@ -283,16 +327,30 @@ v0 shows the raw ratio; v1 maps it to a gear number.
 ## 9. Polling loop timing
 
 ```
-every 100 ms:
-    poll throttle, speed, RPM  →  ring buffers
-    check Turbo trigger
+PARKED  (RPM < 200):
+    every 3000 ms : poll ATRV + 0105 + 010C  (~900 ms total blocking)
+    every  200 ms : redraw parked screen
 
-every 20 ms:
-    sample IMU  →  ring buffer
+IDLE    (RPM 200–999):
+    every  500 ms : poll 010C only            (~300 ms total blocking)
+    every   50 ms : redraw gauge screen
 
-every 50 ms:
-    redraw OLED
+DRIVING (RPM ≥ 1000):
+    every  100 ms : poll 0111 + 010D + 010C   (~900 ms total blocking)
+                    → checkTurbo() after each full poll
+    every   50 ms : redraw gauge screen
+
+Encoder priority (all modes):
+    on encoder turn : skip OBD2 poll for 500 ms
+                      redraw runs freely at full speed
+
+obdSend() timeout : 300 ms (healthy CAN/BT responses arrive < 150 ms)
 ```
+
+Each `obdSend()` call blocks the CPU until the ELM327 sends `>` or the
+timeout expires. There is no RTOS — cooperative scheduling via `millis()`
+timers. The encoder ISR fires independently of the polling loop so no
+encoder turns are lost, even mid-poll.
 
 ---
 
