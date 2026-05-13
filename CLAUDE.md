@@ -28,6 +28,29 @@ Target car: Mercedes CLA180, 2011, gasoline, manual gearbox.
 - Future upgrade: Bluetooth audio to car radio via separate A2DP transmitter module (ESP32 BT is occupied by OBD2)
 - Turbo triggers on throttle drop: >40% → <10%, RPM >1500, gear ≤ 2
 
+## Wokwi simulation hardware (`#ifdef SIMULATION`)
+
+The Wokwi sim replaces real-device peripherals with two components on GPIO:
+
+| Component | Pin | Role |
+| --------- | --- | ---- |
+| Passive buzzer | GPIO17 (TX2) | `tone(900 Hz, 350 ms)` on every Turbo fire — replaces DFPlayer |
+| Red LED | GPIO4 | Blinks for 1 s after each Turbo fire — visual indicator |
+
+**Note: GPIO2 is the ESP32 DevKit built-in LED — do not use it for external circuits.**
+GPIO17 (TX2) is free in simulation because DFPlayer (`PIN_DFP_TX`) is `#else`-guarded.
+
+## After changing sketch or diagram
+
+After any change to `sketches/turbo/turbo.ino` or `Emulators/Wokwi/diagram.json`:
+
+1. Run `make test` — verifies logic is correct (Python unit + integration tests)
+2. Run `make wokwi-build` — recompiles the sketch so Wokwi uses the new firmware
+3. Restart the Wokwi simulator in VS Code (F1 → Wokwi: Start Simulator)
+
+Skipping step 2 means the simulator runs stale firmware — pin changes, threshold
+changes, and display changes will not be visible.
+
 ## Coding conventions
 
 - Follow the same class/file structure as [arduino-laser-target](https://github.com/marcelovani/arduino-laser-target)

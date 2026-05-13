@@ -69,9 +69,17 @@ your first real-car test.
 ## Wokwi simulation
 
 A browser-based circuit simulation lives in [`Emulators/Wokwi/`](Emulators/Wokwi/).
-It replays a built-in 9-second driving scenario that fires two Turbo triggers,
-shows live gauges on the simulated OLED, and lets the encoder cycle views —
-no hardware needed.
+It replays a built-in driving scenario that fires two Turbo triggers, shows live
+gauges on the simulated OLED, and lets the encoder cycle views — no hardware needed.
+
+Simulated hardware (replaces real-device peripherals under `#ifdef SIMULATION`):
+
+| Component | Pin | Role |
+| --------- | --- | ---- |
+| SSD1306 OLED | I2C (GPIO21/22) | Same as real device |
+| KY-040 encoder | GPIO25/26/27 | Same as real device |
+| Passive buzzer | GPIO17 (TX2) | Plays 900 Hz beep for 350 ms when Turbo fires (replaces DFPlayer MP3) |
+| Red LED | GPIO4 | Blinks for 1 s after each Turbo fire (visual indicator) |
 
 **Option A — wokwi.com (browser, no compilation needed)**
 
@@ -134,7 +142,7 @@ make scenario THROTTLE_HIGH=35 RPM_MIN=1200      # tune thresholds
 ### 3. Wokwi simulation — ESP32 firmware, no car
 
 Runs the compiled sketch in a browser-based circuit simulation with a virtual
-OLED, encoder, and DFPlayer. The `#ifdef SIMULATION` code path replays the
+OLED, encoder, buzzer, and LED. The `#ifdef SIMULATION` code path replays the
 built-in driving scenario and fires two Turbo triggers on the virtual display.
 See the [Wokwi simulation](#wokwi-simulation) section above for setup.
 

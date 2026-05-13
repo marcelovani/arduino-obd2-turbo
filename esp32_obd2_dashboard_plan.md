@@ -470,7 +470,7 @@ Four layers — run in order, see the Testing section in README.md for full comm
 | ---------------- | ---------------------------- | ----------------------------------------------------------- | --------------- |
 | Unit tests       | `make test-unit`             | parse_pid, estimate_gear, TurboTrigger logic, all scenarios | None            |
 | Visual monitor   | `make scenario`              | Trigger timing and sequence, threshold tuning               | None            |
-| Wokwi simulation | `make wokwi-build` + VS Code | Compiled firmware, OLED display, encoder                    | None            |
+| Wokwi simulation | `make wokwi-build` + VS Code | Compiled firmware, OLED, encoder, buzzer (GPIO17), LED (GPIO4) | None          |
 | Serial Monitor   | Flash → Arduino IDE          | Full OBD2 + BT stack, real triggers, gear calibration       | ESP32 via USB   |
 
 - **ELM327 emulator (integration tests without a car):** https://github.com/Ircama/ELM327-emulator
@@ -498,8 +498,14 @@ Four layers — run in order, see the Testing section in README.md for full comm
 #define PIN_ENC_CLK  25
 #define PIN_ENC_DT   26
 #define PIN_ENC_SW   27
-#define PIN_DFP_RX   16   // ESP32 RX2 ← DFPlayer TX
-#define PIN_DFP_TX   17   // ESP32 TX2 → DFPlayer RX
+
+#ifdef SIMULATION
+  #define PIN_BUZZER  17   // passive buzzer — beeps 900 Hz / 350 ms on Turbo fire
+  #define PIN_LED      4   // red LED — blinks 1 s after each Turbo fire
+#else
+  #define PIN_DFP_RX  16   // ESP32 RX2 ← DFPlayer TX
+  #define PIN_DFP_TX  17   // ESP32 TX2 → DFPlayer RX
+#endif
 
 // ── Turbo thresholds (tune after first car test) ────────────────────────────
 #define TURBO_THROTTLE_HIGH  40.0f   // % — was accelerating
