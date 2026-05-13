@@ -63,12 +63,20 @@ Bounce encBtn;
 #endif
 
 // ── Encoder ISR (real device only) ───────────────────────────────────────
-// OBD2 calls block for up to 1 s; a CLK pulse lasts only a few ms.
-// The ISR captures every edge instantly so no click is ever missed.
+// OBD2 calls block for up to 1 s; a CLK pulse lasts only ~2 ms.
+// ISR captures every FALLING edge of CLK instantly.
+// 4 ms debounce rejects contact bounce (KY-040 bounce < 3 ms typically).
+// GPIO register read is used instead of digitalRead() — safe and fast in ISR.
 #ifndef SIMULATION
-  volatile int encDelta = 0;
+  volatile int           encDelta   = 0;
+  volatile unsigned long lastEncUs  = 0;
+
   void IRAM_ATTR encISR() {
-    encDelta += (digitalRead(PIN_ENC_DT) == HIGH) ? -1 : 1;
+    unsigned long now = micros();
+    if (now - lastEncUs < 4000) return;   // ignore bounces within 4 ms
+    lastEncUs = now;
+    int dt = (GPIO.in >> PIN_ENC_DT) & 1; // direct register read
+    encDelta += (dt == 1) ? -1 : 1;
   }
 #endif
 
