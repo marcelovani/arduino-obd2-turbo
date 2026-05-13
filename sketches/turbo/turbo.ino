@@ -62,21 +62,31 @@ Bounce encBtn;
   DFRobotDFPlayerMini dfplayer;
 #endif
 
-// ── Encoder ISR (real device only) ───────────────────────────────────────
-// OBD2 calls block for up to 1 s; a CLK pulse lasts only ~2 ms.
-// ISR captures every FALLING edge of CLK instantly.
-// 4 ms debounce rejects contact bounce (KY-040 bounce < 3 ms typically).
-// GPIO register read is used instead of digitalRead() — safe and fast in ISR.
+// ── Encoder ISRs (real device only) ──────────────────────────────────────
+// Two ISRs — one on CLK FALLING, one on DT FALLING — cover both KY-040
+// variants (some lead with CLK for CW, some lead with DT for CCW) and
+// allow CW/CCW in rapid succession without a shared debounce blocking one.
+// GPIO register reads are used instead of digitalRead() — safe in ISR.
+// 1 ms per-pin debounce rejects contact bounce (KY-040 bounce < 1 ms).
 #ifndef SIMULATION
-  volatile int           encDelta   = 0;
-  volatile unsigned long lastEncUs  = 0;
+  volatile int           encDelta  = 0;
+  volatile unsigned long encClkUs  = 0;   // last CLK-ISR timestamp
+  volatile unsigned long encDtUs   = 0;   // last DT-ISR timestamp
 
-  void IRAM_ATTR encISR() {
+  // CLK falls while DT is HIGH → one direction
+  void IRAM_ATTR encISR_CLK() {
     unsigned long now = micros();
-    if (now - lastEncUs < 4000) return;   // ignore bounces within 4 ms
-    lastEncUs = now;
-    int dt = (GPIO.in >> PIN_ENC_DT) & 1; // direct register read
-    encDelta += (dt == 1) ? -1 : 1;
+    if (now - encClkUs < 1000) return;
+    encClkUs = now;
+    if ((GPIO.in >> PIN_ENC_DT) & 1) encDelta--;
+  }
+
+  // DT falls while CLK is HIGH → other direction
+  void IRAM_ATTR encISR_DT() {
+    unsigned long now = micros();
+    if (now - encDtUs < 1000) return;
+    encDtUs = now;
+    if ((GPIO.in >> PIN_ENC_CLK) & 1) encDelta++;
   }
 #endif
 
@@ -549,7 +559,8 @@ void setup() {
   encBtn.interval(10);
   lastClk = digitalRead(PIN_ENC_CLK);
 #ifndef SIMULATION
-  attachInterrupt(digitalPinToInterrupt(PIN_ENC_CLK), encISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(PIN_ENC_CLK), encISR_CLK, FALLING);
+  attachInterrupt(digitalPinToInterrupt(PIN_ENC_DT),  encISR_DT,  FALLING);
 #endif
 
 #ifdef SIMULATION
