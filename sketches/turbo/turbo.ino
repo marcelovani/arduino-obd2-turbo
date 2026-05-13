@@ -51,11 +51,7 @@
 #define ENGINE_IDLE_RPM  200.0f   // below this = engine off → parked screen
 
 // ── Encoder sensitivity ───────────────────────────────────────────────────
-#ifdef SIMULATION
-  #define STEPS_PER_ZONE  1   // Wokwi encoder sends 1 pulse per detent
-#else
-  #define STEPS_PER_ZONE  5   // Real KY-040: ~20 detents/rev → 5 per 90°
-#endif
+#define STEPS_PER_ZONE  1   // 1 detent = 1 view change
 
 // ── Objects ───────────────────────────────────────────────────────────────
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C display(U8G2_R0, U8X8_PIN_NONE);
@@ -64,6 +60,16 @@ Bounce encBtn;
 #ifndef SIMULATION
   BluetoothSerial     BT;
   DFRobotDFPlayerMini dfplayer;
+#endif
+
+// ── Encoder ISR (real device only) ───────────────────────────────────────
+// OBD2 calls block for up to 1 s; a CLK pulse lasts only a few ms.
+// The ISR captures every edge instantly so no click is ever missed.
+#ifndef SIMULATION
+  volatile int encDelta = 0;
+  void IRAM_ATTR encISR() {
+    encDelta += (digitalRead(PIN_ENC_DT) == HIGH) ? -1 : 1;
+  }
 #endif
 
 // ── Shared state ──────────────────────────────────────────────────────────
@@ -151,6 +157,9 @@ void readEncoder() {
     Serial.println("Disconnected — returning to scan");
 #endif
   }
+
+#ifdef SIMULATION
+  // Simulation: poll CLK directly (no blocking calls to miss pulses)
   int clk = digitalRead(PIN_ENC_CLK);
   if (clk != lastClk && clk == LOW) {
     int delta = (digitalRead(PIN_ENC_DT) != clk) ? -1 : 1;
@@ -159,6 +168,18 @@ void readEncoder() {
     currentView = encoderPos / STEPS_PER_ZONE;
   }
   lastClk = clk;
+#else
+  // Real device: consume delta accumulated by the ISR
+  if (encDelta != 0) {
+    noInterrupts();
+    int delta = encDelta;
+    encDelta  = 0;
+    interrupts();
+    int total = 4 * STEPS_PER_ZONE;
+    encoderPos  = ((encoderPos + delta) % total + total) % total;
+    currentView = encoderPos / STEPS_PER_ZONE;
+  }
+#endif
 }
 
 // ── Shared display helpers ────────────────────────────────────────────────
@@ -519,6 +540,9 @@ void setup() {
   encBtn.attach(PIN_ENC_SW, INPUT_PULLUP);
   encBtn.interval(10);
   lastClk = digitalRead(PIN_ENC_CLK);
+#ifndef SIMULATION
+  attachInterrupt(digitalPinToInterrupt(PIN_ENC_CLK), encISR, FALLING);
+#endif
 
 #ifdef SIMULATION
   pinMode(PIN_LED, OUTPUT);
