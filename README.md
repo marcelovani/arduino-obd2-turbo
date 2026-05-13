@@ -59,10 +59,59 @@ your first real-car test.
 
 ## Software
 
-- **Sketch:** `sketches/turbo/turbo.ino` — single source, compiles for both
-  real device and Wokwi simulation (`#ifdef SIMULATION`)
-- **Arduino IDE 2.x**, board: ESP32 Dev Module
-- Libraries: `BluetoothSerial` (built-in), `U8g2`, `DFRobotDFPlayerMini`, `Bounce2`
+### Sketch
+
+`sketches/turbo/turbo.ino` — single source file, compiles for both the real
+device and the Wokwi simulation (`#ifdef SIMULATION`).
+
+### Arduino IDE (for flashing to the real device)
+
+Download **[Arduino IDE 2.x](https://www.arduino.cc/en/software)** and install
+the ESP32 board package:
+
+1. Open Arduino IDE → **File → Preferences**
+2. Add to _Additional boards manager URLs_:
+   `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`
+3. **Tools → Board → Boards Manager** → search `esp32` → install **esp32 by Espressif**
+4. Select board: **Tools → Board → ESP32 Dev Module**
+
+### arduino-cli (for command-line builds and Wokwi firmware)
+
+Required for `make wokwi-build` and `make wokwi-setup`.
+
+```bash
+# Mac
+brew install arduino-cli
+
+# Linux
+curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+```
+
+Then run once to install the ESP32 board package and required libraries:
+
+```bash
+make wokwi-setup
+```
+
+### Arduino libraries
+
+| Library               | Install via                            |
+| --------------------- | -------------------------------------- |
+| `U8g2`                | Arduino IDE Library Manager            |
+| `DFRobotDFPlayerMini` | Arduino IDE Library Manager            |
+| `Bounce2`             | Arduino IDE Library Manager            |
+| `BluetoothSerial`     | Built-in (part of ESP32 board package) |
+
+`make wokwi-setup` installs `U8g2` and `Bounce2` via arduino-cli automatically.
+
+### Python (for tests and scenario monitor)
+
+Python 3.x is required for the test suite and visual monitor.
+
+```bash
+make build    # creates .venv and installs all Python dependencies
+make test     # run all tests
+```
 
 ---
 
@@ -74,12 +123,12 @@ gauges on the simulated OLED, and lets the encoder cycle views — no hardware n
 
 Simulated hardware (replaces real-device peripherals under `#ifdef SIMULATION`):
 
-| Component | Pin | Role |
-| --------- | --- | ---- |
-| SSD1306 OLED | I2C (GPIO21/22) | Same as real device |
-| KY-040 encoder | GPIO25/26/27 | Same as real device |
-| Passive buzzer | GPIO17 (TX2) | Plays 900 Hz beep for 350 ms when Turbo fires (replaces DFPlayer MP3) |
-| Red LED | GPIO4 | Blinks for 1 s after each Turbo fire (visual indicator) |
+| Component      | Pin             | Role                                                                  |
+| -------------- | --------------- | --------------------------------------------------------------------- |
+| SSD1306 OLED   | I2C (GPIO21/22) | Same as real device                                                   |
+| KY-040 encoder | GPIO25/26/27    | Same as real device                                                   |
+| Passive buzzer | GPIO17 (TX2)    | Plays 900 Hz beep for 350 ms when Turbo fires (replaces DFPlayer MP3) |
+| Red LED        | GPIO4           | Blinks for 1 s after each Turbo fire (visual indicator)               |
 
 **Option A — wokwi.com (browser, no compilation needed)**
 
@@ -165,12 +214,24 @@ Every `[Turbo]` line confirms a trigger. This is also where you collect
 real RPM/speed pairs at steady cruise to calibrate the gear ratio thresholds
 in `TURBO_*` constants (see the calibration note in `tests/obd_logic.py`).
 
-**Steps:**
+**Option A — [Arduino IDE 2.x](https://www.arduino.cc/en/software) (recommended)**
 
 1. Connect ESP32 via USB
 2. Arduino IDE → Tools → Board → **ESP32 Dev Module**
 3. Tools → Port → `/dev/cu.usbserial-...` (Mac) or `COM...` (Windows)
 4. Upload sketch, then open Serial Monitor (Ctrl+Shift+M) at **115200 baud**
+
+**Option B — arduino-cli (command line)**
+
+```bash
+arduino-cli upload \
+    --fqbn esp32:esp32:esp32doit-devkit-v1 \
+    --port /dev/cu.usbserial-... \
+    sketches/turbo
+```
+
+Replace `/dev/cu.usbserial-...` with your actual port (`COM...` on Windows).
+Then open any serial monitor at **115200 baud** to watch the OBD2 output.
 
 ### Typical workflow
 
