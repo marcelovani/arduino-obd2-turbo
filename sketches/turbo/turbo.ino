@@ -53,6 +53,7 @@
 
 // ── Encoder sensitivity ───────────────────────────────────────────────────
 #define STEPS_PER_ZONE  1   // 1 detent = 1 view change
+#define NUM_VIEWS       2   // total display screens
 
 // ── Objects ───────────────────────────────────────────────────────────────
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C display(U8G2_R0, U8X8_PIN_NONE);
@@ -192,7 +193,7 @@ void readEncoder() {
   int clk = digitalRead(PIN_ENC_CLK);
   if (clk != lastClk && clk == LOW) {
     int delta = (digitalRead(PIN_ENC_DT) != clk) ? -1 : 1;
-    int total = 4 * STEPS_PER_ZONE;
+    int total = NUM_VIEWS * STEPS_PER_ZONE;
     encoderPos  = ((encoderPos + delta) % total + total) % total;
     currentView = encoderPos / STEPS_PER_ZONE;
   }
@@ -204,7 +205,7 @@ void readEncoder() {
     int delta = encDelta;
     encDelta  = 0;
     interrupts();
-    int total = 4 * STEPS_PER_ZONE;
+    int total = NUM_VIEWS * STEPS_PER_ZONE;
     encoderPos    = ((encoderPos + delta) % total + total) % total;
     currentView   = encoderPos / STEPS_PER_ZONE;
     lastEncActiveMs = millis();
@@ -248,88 +249,69 @@ void drawParked(const char* deviceName) {
   display.sendBuffer();
 }
 
+// ── Bar helper ────────────────────────────────────────────────────────────
+// Draws a framed bar (full display width) filled proportionally.
+// Yellow OLED top 16 rows / blue bottom 48 rows — bars live in blue zone.
+void drawBar(int x, int y, int w, int h, float value, float maxVal) {
+  int fill = (int)(value / maxVal * (w - 2));
+  fill = constrain(fill, 0, w - 2);
+  display.drawFrame(x, y, w, h);
+  if (fill > 0) display.drawBox(x + 1, y + 1, fill, h - 2);
+}
+
 // ── Gauge display ─────────────────────────────────────────────────────────
+// OLED: top 16 rows = yellow (header), bottom 48 rows = blue (data).
+//
+// Screen 0 — bars:      Screen 1 — text only:
+//  [yellow] Turbo:N Gear:N   [yellow] Turbo:N Gear:N
+//  Throttle  N%              Throttle: N%
+//  [========  ]              RPM: N
+//  RPM  N                    Speed: N mph
+//  [====      ]
+//  Speed  N mph
+//  [===       ]
 void drawDisplay() {
-  int  gear        = estimateGear(metricRPM, metricSpeed);
-  bool turboRecent = (millis() < turboUntilMs);
+  int   gear        = estimateGear(metricRPM, metricSpeed);
+  bool  turboRecent = (millis() < turboUntilMs);
+  float speedMph    = metricSpeed * 0.621371f;
 
   display.clearBuffer();
 
-  // ── Header ──
-  if (turboRecent) {
-    display.setFont(u8g2_font_ncenB10_tr);
-    char buf[24];
-    snprintf(buf, sizeof(buf), "** PSSSSH! #%lu **", turboCount);
-    display.drawStr(0, 12, buf);
-    display.setFont(u8g2_font_5x7_tr);
-  } else if (currentView == 3) {
-    display.setFont(u8g2_font_5x7_tr);
-    char gbuf[10];
-    snprintf(gbuf, sizeof(gbuf), "Gear: %d", gear);
-    display.drawStr(0, 8, gbuf);
-  } else {
-    display.setFont(u8g2_font_5x7_tr);
-    char hdr[24];
-    snprintf(hdr, sizeof(hdr), "Turbo:%lu", turboCount);
-    display.drawStr(0, 8, hdr);
-  }
+  // ── Yellow zone header (y=0–15) ──────────────────────────────────────────
+  display.setFont(u8g2_font_ncenB08_tr);
+  char hdr[28];
+  if (turboRecent)
+    snprintf(hdr, sizeof(hdr), "PSSSSH! #%lu", turboCount);
+  else
+    snprintf(hdr, sizeof(hdr), "Turbo:%-2lu  Gear:%d", turboCount, gear);
+  display.drawStr(0, 11, hdr);
 
-  // ── View content ──
+  // ── Blue zone (y=16–63) ──────────────────────────────────────────────────
+  display.setFont(u8g2_font_5x7_tr);
+  char buf[24];
+
   if (currentView == 0) {
-    display.setFont(u8g2_font_ncenB24_tr);
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%3.0f%%", metricTPS);
-    display.drawStr(14, 58, buf);
-    display.setFont(u8g2_font_5x7_tr);
-    display.drawStr(0, 20, "THROTTLE");
-    int barW = (int)(metricTPS);
-    display.drawFrame(0, 24, 102, 8);
-    if (barW > 0) display.drawBox(1, 25, barW, 6);
+    // Screen 0: label + value + bar for each metric
+    snprintf(buf, sizeof(buf), "Throttle  %.0f%%", metricTPS);
+    display.drawStr(0, 23, buf);
+    drawBar(0, 25, 128, 5, metricTPS, 100.0f);
 
-  } else if (currentView == 1) {
-    display.setFont(u8g2_font_ncenB24_tr);
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%3.0f", metricSpeed);
-    display.drawStr(14, 58, buf);
-    display.setFont(u8g2_font_5x7_tr);
-    display.drawStr(0, 20, "SPEED km/h");
-    char grpbuf[12];
-    snprintf(grpbuf, sizeof(grpbuf), "Gear: %d", gear);
-    display.drawStr(80, 20, grpbuf);
+    snprintf(buf, sizeof(buf), "RPM  %.0f", metricRPM);
+    display.drawStr(0, 38, buf);
+    drawBar(0, 40, 128, 5, metricRPM, 8000.0f);
 
-  } else if (currentView == 2) {
-    display.setFont(u8g2_font_5x7_tr);
-    char line[32];
-    snprintf(line, sizeof(line), "TPS:  %5.1f %%",   metricTPS);   display.drawStr(0, 20, line);
-    snprintf(line, sizeof(line), "SPD:  %5.1f km/h", metricSpeed); display.drawStr(0, 30, line);
-    snprintf(line, sizeof(line), "RPM:  %5.0f",      metricRPM);   display.drawStr(0, 40, line);
-    snprintf(line, sizeof(line), "Gear: %d",          gear);        display.drawStr(0, 50, line);
+    snprintf(buf, sizeof(buf), "Speed  %.0f mph", speedMph);
+    display.drawStr(0, 53, buf);
+    drawBar(0, 55, 128, 5, speedMph, 140.0f);
 
   } else {
-    // Dual bar — throttle + speed
-    display.setFont(u8g2_font_5x7_tr);
-
-    display.drawStr(0, 22, "Throttle");
-    char tpsbuf[8];
-    snprintf(tpsbuf, sizeof(tpsbuf), "%3.0f%%", metricTPS);
-    display.drawStr(90, 22, tpsbuf);
-    int tpsW = (int)metricTPS;
-    display.drawFrame(0, 24, 102, 10);
-    if (tpsW > 0) display.drawBox(1, 25, tpsW, 8);
-
-    display.drawStr(0, 44, "Speed");
-    char spdbuf[10];
-    snprintf(spdbuf, sizeof(spdbuf), "%3.0f", metricSpeed);
-    display.drawStr(90, 44, spdbuf);
-    int spdW = min(100, (int)(metricSpeed / 2.0f));
-    display.drawFrame(0, 46, 102, 10);
-    if (spdW > 0) display.drawBox(1, 47, spdW, 8);
-  }
-
-  // ── View indicator: 4 circles on right edge, filled = current ──
-  for (int i = 0; i < 4; i++) {
-    if (i == currentView) display.drawDisc(124,   6 + i * 12, 3);
-    else                  display.drawCircle(124, 6 + i * 12, 3);
+    // Screen 1: text only
+    snprintf(buf, sizeof(buf), "Throttle: %.0f%%", metricTPS);
+    display.drawStr(0, 26, buf);
+    snprintf(buf, sizeof(buf), "RPM: %.0f", metricRPM);
+    display.drawStr(0, 40, buf);
+    snprintf(buf, sizeof(buf), "Speed: %.0f mph", speedMph);
+    display.drawStr(0, 55, buf);
   }
 
   display.sendBuffer();
