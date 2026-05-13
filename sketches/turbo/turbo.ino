@@ -91,11 +91,13 @@ uint32_t lastDrawMs     = 0;
   uint32_t simPhaseStart = 0;
 #else
   enum AppState { SCANNING, CONNECTING, INIT_ELM, RUNNING };
-  AppState appState      = SCANNING;
-  String   targetName    = "";
-  uint32_t lastPollMs    = 0;
-  uint32_t lastIdlePollMs = 0;
-  int      scanFrame     = 0;
+  AppState appState        = SCANNING;
+  String   targetName      = "";
+  uint32_t lastPollMs      = 0;
+  uint32_t lastIdlePollMs  = 0;
+  uint32_t engineOffSince  = 0;   // millis() when RPM first dropped below threshold
+  int      scanFrame       = 0;
+  #define  ENGINE_OFF_DEBOUNCE_MS  3000  // RPM must stay low for 3s before parked screen
 #endif
 
 // ── Gear estimation ───────────────────────────────────────────────────────
@@ -315,8 +317,9 @@ void advanceScenario() {
   while (scenIdx + 1 < SCENARIO_LEN - 1 && SCENARIO[scenIdx + 1].t <= elapsed)
     scenIdx++;
   if (elapsed >= SCENARIO[SCENARIO_LEN - 1].t) {
-    scenIdx   = 0;
-    scenStart = millis();
+    // Loop back to the first engine-running point (skip engine-off intro)
+    scenIdx   = 1;
+    scenStart = millis() - SCENARIO[1].t;
     prevTPS   = 0;
     return;
   }
@@ -453,7 +456,15 @@ void doRunning() {
   uint32_t now = millis();
   readEncoder();
 
-  if (metricRPM < ENGINE_IDLE_RPM) {
+  // Debounce the engine-off transition so a single bad read can't flip the screen
+  if (metricRPM >= ENGINE_IDLE_RPM) {
+    engineOffSince = 0;
+  } else if (engineOffSince == 0) {
+    engineOffSince = now;
+  }
+  bool engineOff = (engineOffSince > 0 && now - engineOffSince >= ENGINE_OFF_DEBOUNCE_MS);
+
+  if (engineOff) {
     // Engine off — slow-poll voltage/coolant, show parked screen
     if (now - lastIdlePollMs >= 3000) {
       String r; float v;
@@ -467,7 +478,7 @@ void doRunning() {
       lastDrawMs = now;
     }
   } else {
-    // Engine running — fast-poll drive metrics, show gauges
+    // Engine running (or RPM drop not yet confirmed) — fast-poll, show gauges
     if (now - lastPollMs >= 100) {
       String r; float v;
       r = obdSend("0111"); v = parsePID(r, 1, 100.0f / 255.0f); if (v >= 0) metricTPS   = v;
