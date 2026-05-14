@@ -51,14 +51,14 @@ The `mp3/` folder in this repo contains the source MP3 files. Copy the entire
 The sketch uses `playMp3Folder(n)` which looks up files by name, so copy order
 does not matter.
 
-| Filename      | Content              | When played                                     |
-| ------------- | -------------------- | ----------------------------------------------- |
-| `0001.mp3`    | "Pairing"            | Each time the device starts scanning for ELM327 |
-| `0004.mp3`    | "OBD2 not connected" | Scan timeout (30 s) or Bluetooth connect fail   |
-| `0008.mp3`    | "Demo mode"          | When demo mode is turned on via the menu        |
-| `0009.mp3`    | "Goodbye"            | When the Power option is used to turn off       |
-| `0010.mp3`    | Long spray           | Turbo trigger in 1st gear (1st → 2nd change)    |
-| `0011.mp3`    | Faster spray         | Turbo trigger in 2nd gear (2nd → 3rd change)    |
+| Filename   | Content              | When played                                     |
+| ---------- | -------------------- | ----------------------------------------------- |
+| `0001.mp3` | "Pairing"            | Each time the device starts scanning for ELM327 |
+| `0004.mp3` | "OBD2 not connected" | Scan timeout (30 s) or Bluetooth connect fail   |
+| `0008.mp3` | "Demo mode"          | When demo mode is turned on via the menu        |
+| `0009.mp3` | "Goodbye"            | When the Power option is used to turn off       |
+| `0010.mp3` | Long spray           | Turbo trigger in 1st gear (1st → 2nd change)    |
+| `0011.mp3` | Faster spray         | Turbo trigger in 2nd gear (2nd → 3rd change)    |
 
 Format the card as **FAT32**. The `mp3/` folder must be at the root of the card.
 
