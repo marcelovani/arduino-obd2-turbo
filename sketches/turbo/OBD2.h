@@ -17,7 +17,7 @@
 #if !defined(SIMULATION) && !defined(DEMO)
 
 #define ENCODER_PRIORITY_MS  500    // pause OBD2 polling after encoder activity
-#define SCAN_TIMEOUT_MS      60000  // give up scanning after 60 s
+#define SCAN_TIMEOUT_MS      30000  // give up scanning after 30 s
 
 enum AppState { SCANNING, CONNECTING, INIT_ELM, RUNNING, NO_OBD };
 AppState appState       = SCANNING;
