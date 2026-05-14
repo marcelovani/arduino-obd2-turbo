@@ -730,15 +730,170 @@ void loop() {
 
 ---
 
-## 14. Next steps
+## 14. Current implementation status (as of May 2026)
 
-When the ELEGOO ESP32 arrives:
+All steps in the original next-steps list are complete. The device is fully
+functional in the car. Current sketch modules:
 
-1. Flash "Blink" — confirm toolchain
-2. Run `oled_test.ino` — confirm display wiring
-3. Wire DFPlayer Mini, load `0001.mp3` onto SD card, confirm sound plays
-4. **Only then** tackle Bluetooth + OBD2
+| File | Role |
+|------|------|
+| `turbo.ino` | Entry point, loop(), include order |
+| `Config.h` | Pin assignments, compile-time thresholds |
+| `Settings.h` | Runtime-adjustable cfg* variables, NVS persistence |
+| `OBD2.h` | BLE scanning → connecting → ELM327 init → live polling |
+| `GearEstimator.h` | Speed-band gear estimation |
+| `TurboTrigger.h` | checkTurbo() trigger logic |
+| `Display.h` | drawDisplay(), drawParked(), bar graphs |
+| `Menu.h` | Menu state machine: Main / Settings / Edit / Recording / Export |
+| `Encoder.h` | Rotary encoder read, button debounce |
+| `Recorder.h` | OBD2 data recorder to LittleFS (CSV) |
+| `WifiExport.h` | WiFi AP + HTTP server for log download/delete |
+| `Scenario.h` | Built-in demo drive cycle |
+| `SimLoop.h` | Wokwi simulation loop |
+
+**Build modes:**
+
+| Flag | What runs |
+|------|-----------|
+| (none) | Production: BLE OBD2, DFPlayer, LittleFS, WiFi export |
+| `-DDEMO` | Demo drive cycle, DFPlayer, LittleFS, WiFi export |
+| `-DSIMULATION` | Wokwi sim: I2C OLED, buzzer, LED, no BLE/FS/WiFi |
+
+**Known issues resolved:**
+- TPS always showed ~10% at idle → switched from PID `0x11` (Absolute) to `0x45` (Relative Throttle Position)
+- Gear display was "sticky" when clutch depressed → replaced RPM/speed ratio with speed-band estimation
+
+---
+
+## 15. Gear detection research — manual gearbox
+
+### The problem
+
+On a manual gearbox the driver presses the clutch, which momentarily decouples
+engine RPM from wheel speed. During this ~200–400 ms window the ratio
+`RPM ÷ speed` becomes meaningless (RPM drops to idle while speed is still
+high), causing the old ratio-based gear estimator to report a false high gear.
+This made the displayed gear number "sticky" — it would remain at, say, 3rd
+even as the car slowed down.
+
+### What we implemented (current approach)
+
+**Speed-band estimation** in [GearEstimator.h](sketches/turbo/GearEstimator.h):
+
+```cpp
+int estimateGear(float rpm, float speed) {
+  if (speed < 3.0f || rpm < 200.0f) return 0;
+  if (speed < cfgSpeed12) return 1;   // default: < 50 km/h (30 mph)
+  if (speed < cfgSpeed23) return 2;   // default: < 65 km/h (40 mph)
+  if (speed < 145.0f)     return 3;
+  if (speed < 165.0f)     return 4;
+  if (speed < 200.0f)     return 5;
+  return 6;
+}
+```
+
+Gear is a pure function of speed. As speed drops, gear drops — no stickiness.
+The 1→2 and 2→3 boundaries are tunable in the Settings menu (0–100 km/h, 0–150 km/h).
+
+CLA180 real shift points: 1→2 at ~30 mph (48 km/h), 2→3 at ~40 mph (64 km/h).
+
+**Limitation:** speed bands cannot distinguish gear within a band. E.g. at
+60 km/h the car could be in 2nd or 3rd depending on how the driver is driving.
+For the Turbo trigger this is acceptable — the trigger is gated by gear ≤ 2,
+and 2nd gear shifts happen below 65 km/h by design.
+
+### Can OBD2 give us the actual gear or clutch state?
+
+Research conducted May 2026. Summary:
+
+#### Standard OBD2 PIDs (SAE J1979 / ISO 15031-5)
+
+| PID | Name | Verdict |
+|-----|------|---------|
+| `0x0A3` | Current Gear | Only valid for **automatic TCUs** — the ECU reports the gear the transmission selected. Manual gearboxes have no TCU that tracks gear position. Returns NODATA on CLA180. |
+| `0x111` | Absolute Throttle Position | Returns raw sensor angle; ~10% at idle. **Not useful for idle detection.** Switched to `0x145`. |
+| `0x145` | Relative Throttle Position | Normalised to 0% at closed throttle. **Currently in use.** |
+| None | Clutch pedal position | **No standard OBD2 PID exists for clutch position** in SAE J1979. |
+
+#### Clutch Pedal Position (CPP) switch
+
+The ECU knows whether the clutch is fully pressed or released — it uses this
+for the starter interlock and to disengage cruise control. OBD fault codes
+**P0830** (Switch A Circuit) and **P0833** (Switch B Circuit) reference it.
+However:
+
+- These are **diagnostic trouble codes**, not live-data PIDs.
+- The CPP signal is binary (pressed / not pressed), not a continuous position.
+- Mercedes-Benz exposes clutch state on its **internal CAN bus** but the exact
+  proprietary PID is not documented for the W176 platform and is **not
+  accessible via a generic ELM327 dongle**.
+- Accessing it would require the official **XENTRY/DAS** tool or reverse-
+  engineering the W176 CAN database.
+
+#### Engine Load as an indirect clutch indicator (PID `0x04`)
+
+When the clutch is depressed mid-pull, the engine suddenly loses load. Engine
+Load (calculated from MAP sensor + RPM) drops to near-zero even though RPM is
+still high and throttle is still open. This produces a distinctive pattern:
+
+```
+TPS:    ████████░░░░░  (throttle still partly open)
+RPM:    ████████▄▄░░░  (starts to drop)
+Load:   ████████░░░░░  (drops to near-zero — clutch pressed)
+Speed:  ████████████░  (barely changes in 200 ms)
+```
+
+This is distinct from a simple throttle lift (where TPS also drops to 0).
+However:
+- Requires polling one extra PID (`010 4`) every 100 ms — adds ~50 ms latency per cycle.
+- The Load signal is noisy and ECU-specific; false positives are likely.
+- For the Turbo trigger use-case, this adds no value: we already detect the
+  lift-off via TPS drop and only care which gear the car was in at that moment,
+  not whether the clutch was pressed.
+
+#### Conclusion
+
+For a 2011 Mercedes CLA180 with a manual gearbox and a generic BLE ELM327
+dongle, **there is no reliable OBD2 signal for clutch position or gear number**.
+The speed-band approach is the best available method without manufacturer-
+specific tooling.
+
+### Possible future improvements
+
+1. **Tighter speed bands after real-world recording** — use the CSV recorder
+   (Menu → Record) to capture a full drive, then plot speed vs. subjective
+   gear in the data to refine `cfgSpeed12` / `cfgSpeed23`.
+
+2. **Engine Load delta heuristic** — add PID `0104` to the poll loop and fire
+   the Turbo sound when Load drops sharply while TPS is still above a moderate
+   threshold (clutch-press detection). Would enable the Turbo in 3rd gear too.
+   Risk: false positives from hills or engine braking.
+
+3. **CAN bus sniffer (hardware)** — a separate MCP2515 module tapped directly
+   onto the OBD2 port CAN lines (pins 6 + 14) can read all internal CAN frames,
+   not just SAE J1979 PIDs. The W176 clutch switch frame address could be found
+   by recording raw traffic with clutch pressed/released. This is the only way
+   to get true clutch state without XENTRY. High effort.
+
+### Research links
+
+- [Feasibility of clutch position over CAN/OBD2 — FT86CLUB forum][ft86-clutch]
+- [OBD2 PID for current transmission gear — Porsche 718 Forum][718-gear]
+- [OBD2 Pid for current gear w164 — MBWorld.org][mbworld-gear]
+- [OBD-II PIDs reference — Wikipedia][wiki-pids]
+- [Standard OBD2 PIDs table — CSS Electronics][css-pids]
+- [ResearchGate: PIDs for gear, brake pedal, fuel consumption][researchgate-pids]
+- [Read gear number from CAN — GitHub issue][github-can-gear]
+
+---
 
 [amz-esp32]: https://www.amazon.co.uk/ELEGOO-ESP-WROOM-32-Development-Micro-USB-Microcontroller/dp/B0D8T5P8JM
 [elm-home]: https://www.elm327.com/index.php
 [laser-target]: https://github.com/marcelovani/arduino-laser-target
+[ft86-clutch]: https://www.ft86club.com/forums/showthread.php?t=141330
+[718-gear]: https://www.718forum.com/threads/obd-pid-for-current-transmission-gear.29541/
+[mbworld-gear]: https://mbworld.org/forums/m-class-w164/721087-obd2-pid-current-gear-w164.html
+[wiki-pids]: https://en.wikipedia.org/wiki/OBD-II_PIDs
+[css-pids]: https://www.csselectronics.com/pages/obd2-pid-table-on-board-diagnostics-j1979
+[researchgate-pids]: https://www.researchgate.net/post/What_are_Parameter_IDs_in_OBD-II_for_current_gear_breaking_pedal_position_and_current_fuel_consumption
+[github-can-gear]: https://github.com/mkovero/7226ctrl/issues/15
