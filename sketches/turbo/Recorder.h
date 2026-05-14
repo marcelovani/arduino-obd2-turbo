@@ -31,6 +31,25 @@ static String nextLogFilename() {
   return String(buf);
 }
 
+void wipeAllLogs() {
+  if (!mountFs()) return;
+  File root = LittleFS.open("/");
+  File f;
+  while ((f = root.openNextFile())) {
+    if (!f.isDirectory()) {
+      String path = f.name();
+      if (!path.startsWith("/")) path = "/" + path;
+      f.close();
+      LittleFS.remove(path);
+    }
+  }
+  // Reset the sequential filename counter
+  Preferences prefs;
+  prefs.begin("rec", false);
+  prefs.putInt("count", 0);
+  prefs.end();
+}
+
 void startRecording() {
   if (!mountFs()) return;
   String fname = nextLogFilename();

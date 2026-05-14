@@ -26,6 +26,7 @@ int       settSel   = 0;
 #if !defined(SIMULATION)
 void startRecording();
 void startWifiExport();
+void wipeAllLogs();
 #endif
 
 // ── Rendering ─────────────────────────────────────────────────────────────
@@ -181,14 +182,16 @@ void execSettingsMenu() {
   } else if (settSel == NUM_CFG_DEFS + 1) {
 #ifndef SIMULATION
     resetSettings();
+    wipeAllLogs();
 #endif
     display.clearBuffer();
     display.setFont(u8g2_font_ncenB10_tr);
     display.drawStr(0, 28, "Factory reset");
     display.setFont(u8g2_font_ncenB08_tr);
-    display.drawStr(0, 44, "Done!");
+    display.drawStr(0, 44, "Settings + logs");
+    display.drawStr(0, 57, "cleared.");
     display.sendBuffer();
-    delay(1200);
+    delay(1500);
     menuState = MENU_MAIN;
   } else {
     menuState = MENU_EDIT;
