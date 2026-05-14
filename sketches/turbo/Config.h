@@ -41,8 +41,8 @@
 #define VOICE_PLAY_MS        3000    // ms to wait for voice clip to finish before muting amp
 // Speed-band gear estimation — OBD2 PID 010D returns speed in km/h (SAE J1979).
 // Tune via Settings menu. CLA180: shifts 1→2 at ~30 mph (48 km/h), 2→3 at ~40 mph (64 km/h).
-#define TURBO_SPEED_GEAR12   50.0f   // km/h — below this → gear 1
-#define TURBO_SPEED_GEAR23   65.0f   // km/h — below this (and ≥ GEAR12) → gear 2
+#define TURBO_SPEED_GEAR12   50.0f   // km/h (31 mph) — below this → gear 1
+#define TURBO_SPEED_GEAR23   65.0f   // km/h (40 mph) — below this (and ≥ GEAR12) → gear 2
 
 // ── Engine state thresholds ───────────────────────────────────────────────
 #define ENGINE_IDLE_RPM    200.0f    // below = engine off → parked screen
