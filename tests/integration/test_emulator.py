@@ -140,12 +140,12 @@ class TestTurboViaEmulator:
     def test_turbo_fires_on_gear_change(self, elm_server, client):
         turbo = TurboTrigger()
 
-        # Step through a 2nd-gear acceleration + lift-off (ratio ~47 → gear 2)
+        # Step through a 2nd-gear acceleration + lift-off (speed 62 km/h → gear 2)
         steps = [
             (0,   0,   800,   0),   # idle
-            (100, 70, 3200,  70),   # hard acceleration in 2nd (ratio 45.7 → gear 2)
-            (200, 80, 3500,  70),   # near peak (ratio 50 → gear 2)
-            (300,  4, 3300,  70),   # lift off → Turbo expected (ratio 47, RPM > 3000)
+            (100, 70, 3200,  62),   # hard acceleration in 2nd (speed 62 < 65 → gear 2)
+            (200, 80, 3500,  62),   # near peak (speed 62 → gear 2)
+            (300,  4, 3300,  62),   # lift off → Turbo expected (speed 62, RPM > 3000)
         ]
 
         for (t, tps, rpm, speed) in steps:

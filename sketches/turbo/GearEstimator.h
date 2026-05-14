@@ -1,19 +1,18 @@
-// GearEstimator.h — Estimates current gear from RPM and speed.
+// GearEstimator.h — Estimates current gear from speed only (speed-band approach).
 //
-// Uses ratio = RPM ÷ speed_km/h. OBD2 PID 010D always reports km/h (SAE J1979)
-// regardless of country, so the ratio is correct globally.
+// OBD2 PID 010D always reports km/h (SAE J1979) regardless of country.
+// Speed bands are monotonic so gear naturally drops as speed drops — no stickiness
+// from clutch-depressed states where RPM is at idle but speed still has momentum.
 //
-// Gear 1/2 thresholds are runtime-tunable via cfgRatio12 / cfgRatio23.
-// Gears 3–6 use fixed ratios (calibrated for a typical small-engine manual).
-// Tune gear 1/2 via the Settings menu after driving steadily in each gear.
+// Gear 1/2 and 2/3 boundaries are runtime-tunable via cfgSpeed12 / cfgSpeed23.
+// Gears 3–6 use fixed bands (calibrated for a typical small-engine manual car).
 
 int estimateGear(float rpm, float speed) {
-  if (speed < 2.0f || rpm < 100.0f) return 0;
-  float ratio = rpm / speed;
-  if      (ratio > cfgRatio12) return 1;
-  else if (ratio > cfgRatio23) return 2;
-  else if (ratio > 19.0f)      return 3;
-  else if (ratio > 12.0f)      return 4;
-  else if (ratio >  8.0f)      return 5;
-  else                         return 6;
+  if (speed < 3.0f || rpm < 200.0f) return 0;
+  if (speed < cfgSpeed12) return 1;   // < 50 km/h (30 mph)
+  if (speed < cfgSpeed23) return 2;   // < 65 km/h (40 mph)
+  if (speed < 145.0f)     return 3;
+  if (speed < 165.0f)     return 4;
+  if (speed < 200.0f)     return 5;
+  return 6;
 }

@@ -261,7 +261,7 @@ void doRunning() {
     // Driving — TPS + speed + RPM every 100 ms, then check for Turbo
     if (!encActive && now - lastPollMs >= 100) {
       String r; float v;
-      r = obdSend("0111"); v = parsePID(r, 1, 100.0f / 255.0f); if (v >= 0) metricTPS   = v;
+      r = obdSend("0145"); v = parsePID(r, 1, 100.0f / 255.0f); if (v >= 0) metricTPS   = v;
       r = obdSend("010D"); v = parsePID(r, 1, 1.0f);             if (v >= 0) metricSpeed = v;
       r = obdSend("010C"); v = parsePID(r, 2, 0.25f);            if (v >= 0) metricRPM   = v;
       checkTurbo(now);

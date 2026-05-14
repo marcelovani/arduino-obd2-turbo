@@ -23,8 +23,8 @@ float cfgMaxGear      = (float)TURBO_MAX_GEAR;
 float cfgCooldownMs   = (float)TURBO_COOLDOWN_MS;
 float cfgVolGear1     = (float)TURBO_VOLUME_GEAR1;
 float cfgVolGear2     = (float)TURBO_VOLUME_GEAR2;
-float cfgRatio12      = TURBO_RATIO_GEAR12;
-float cfgRatio23      = TURBO_RATIO_GEAR23;
+float cfgSpeed12      = TURBO_SPEED_GEAR12;
+float cfgSpeed23      = TURBO_SPEED_GEAR23;
 float cfgVolVoice     = (float)TURBO_VOLUME_VOICE;
 
 static SettingDef CFG_DEFS[] = {
@@ -39,9 +39,9 @@ static SettingDef CFG_DEFS[] = {
   {"Vol Gear 1",  &cfgVolGear1,       1.0f,   0.0f,   30.0f, true }, // spray volume for 1st gear change
   {"Vol Gear 2",  &cfgVolGear2,       1.0f,   0.0f,   30.0f, true }, // spray volume for 2nd gear change
   {"Vol Voice",   &cfgVolVoice,       1.0f,   0.0f,   30.0f, true }, // voice announcements volume
-  // Gear estimation (ratio = RPM ÷ speed_km/h — OBD2 speed is always km/h):
-  {"Ratio G1/G2", &cfgRatio12,        5.0f,  30.0f,  200.0f, true }, // ratio above this = 1st gear
-  {"Ratio G2/G3", &cfgRatio23,        5.0f,  20.0f,  150.0f, true }, // ratio above this (and ≤ G1/G2) = 2nd gear
+  // Gear estimation speed bands (km/h — OBD2 PID 010D is always km/h):
+  {"Spd G1/G2 km", &cfgSpeed12,       5.0f,   0.0f,  100.0f, true }, // speed below this = 1st gear
+  {"Spd G2/G3 km", &cfgSpeed23,       5.0f,   0.0f,  150.0f, true }, // speed below this (and ≥ G1/G2) = 2nd gear
 };
 #define NUM_CFG_DEFS  (int)(sizeof(CFG_DEFS) / sizeof(CFG_DEFS[0]))
 
@@ -58,8 +58,8 @@ static void loadSettings() {
   cfgCooldownMs   = prefs.getFloat("cooldown", cfgCooldownMs);
   cfgVolGear1     = prefs.getFloat("volG1",    cfgVolGear1);
   cfgVolGear2     = prefs.getFloat("volG2",    cfgVolGear2);
-  cfgRatio12      = prefs.getFloat("ratio12",  cfgRatio12);
-  cfgRatio23      = prefs.getFloat("ratio23",  cfgRatio23);
+  cfgSpeed12      = prefs.getFloat("spd12",    cfgSpeed12);
+  cfgSpeed23      = prefs.getFloat("spd23",    cfgSpeed23);
   cfgVolVoice     = prefs.getFloat("volVoice", cfgVolVoice);
   prefs.end();
 }
@@ -75,8 +75,8 @@ static void saveSettings() {
   prefs.putFloat("cooldown", cfgCooldownMs);
   prefs.putFloat("volG1",    cfgVolGear1);
   prefs.putFloat("volG2",    cfgVolGear2);
-  prefs.putFloat("ratio12",  cfgRatio12);
-  prefs.putFloat("ratio23",  cfgRatio23);
+  prefs.putFloat("spd12",    cfgSpeed12);
+  prefs.putFloat("spd23",    cfgSpeed23);
   prefs.putFloat("volVoice", cfgVolVoice);
   prefs.end();
 }
@@ -94,8 +94,8 @@ static void resetSettings() {
   cfgCooldownMs   = (float)TURBO_COOLDOWN_MS;
   cfgVolGear1     = (float)TURBO_VOLUME_GEAR1;
   cfgVolGear2     = (float)TURBO_VOLUME_GEAR2;
-  cfgRatio12      = TURBO_RATIO_GEAR12;
-  cfgRatio23      = TURBO_RATIO_GEAR23;
+  cfgSpeed12      = TURBO_SPEED_GEAR12;
+  cfgSpeed23      = TURBO_SPEED_GEAR23;
   cfgVolVoice     = (float)TURBO_VOLUME_VOICE;
 }
 #endif

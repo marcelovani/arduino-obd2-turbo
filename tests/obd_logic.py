@@ -21,9 +21,9 @@ TURBO_RPM_MIN        = 3000.0 # RPM must be above this (near peak / about to shi
 TURBO_MIN_GEAR       = 1      # trigger from 1st gear upward
 TURBO_MAX_GEAR       = 2      # only trigger in 2nd gear or lower
 TURBO_COOLDOWN_MS    = 2000   # min ms between Turbo sounds
-# RPM/speed (km/h) ratio boundaries — CLA180: shift 1→2 at ~30 mph, ~4000 RPM → ratio ≈ 83
-TURBO_RATIO_GEAR12   = 85.0   # ratio > this → gear 1
-TURBO_RATIO_GEAR23   = 45.0   # ratio > this (and ≤ GEAR12) → gear 2
+# Speed-band gear boundaries (km/h) — CLA180: shifts 1→2 at ~30 mph (48 km/h), 2→3 at ~40 mph (64 km/h)
+TURBO_SPEED_GEAR12   = 50.0   # speed below this → gear 1
+TURBO_SPEED_GEAR23   = 65.0   # speed below this (and ≥ GEAR12) → gear 2
 
 
 def parse_pid(resp: str, byte_count: int, multiplier: float) -> float:
@@ -57,27 +57,27 @@ def estimate_gear(rpm: float, speed_kmh: float) -> int:
     Mirror of C++ estimateGear(rpm, speedKmh).
 
     OBD2 PID 010D always returns speed in km/h (SAE J1979 standard), even for
-    UK cars. The display converts to mph but all ratio thresholds use km/h.
+    UK cars. The display converts to mph but all speed thresholds use km/h.
 
-    Estimates gear from ratio = RPM / speed_kmh.
+    Estimates gear from speed bands only (not RPM/speed ratio).
     Returns 0 if gear cannot be determined (stopped or engine off).
 
     CLA180 defaults (tune via Settings menu after driving):
-      Gear 1: ratio > 85  (e.g. 4000 RPM at 47 km/h = 29 mph → ratio 85)
-      Gear 2: ratio 45–85 (e.g. 3500 RPM at 70 km/h = 43 mph → ratio 50)
-      Gear 3: ratio 19–45
-      Gear 4: ratio 12–19
-      Gear 5: ratio  8–12
-      Gear 6: ratio  < 8
+      Gear 0: speed < 3 km/h or RPM < 200
+      Gear 1: speed < 50 km/h
+      Gear 2: speed < 80 km/h
+      Gear 3: speed < 145 km/h
+      Gear 4: speed < 165 km/h
+      Gear 5: speed < 200 km/h
+      Gear 6: speed ≥ 200 km/h
     """
-    if speed_kmh < 2 or rpm < 100:
+    if speed_kmh < 3 or rpm < 200:
         return 0
-    ratio = rpm / speed_kmh
-    if ratio > TURBO_RATIO_GEAR12: return 1
-    if ratio > TURBO_RATIO_GEAR23: return 2
-    if ratio > 19:                 return 3
-    if ratio > 12:                 return 4
-    if ratio >  8:                 return 5
+    if speed_kmh < TURBO_SPEED_GEAR12: return 1
+    if speed_kmh < TURBO_SPEED_GEAR23: return 2
+    if speed_kmh < 145:                return 3
+    if speed_kmh < 165:                return 4
+    if speed_kmh < 200:                return 5
     return 6
 
 
@@ -106,8 +106,8 @@ class MenuController:
         ("Cooldown ms", "cooldown_ms",100.0, 500.0,10000.0),
         ("Vol Gear 1",  "vol_gear1",   1.0,   0.0,   30.0),
         ("Vol Gear 2",  "vol_gear2",   1.0,   0.0,   30.0),
-        ("Ratio G1/G2", "ratio12",     5.0,  30.0,  200.0),
-        ("Ratio G2/G3", "ratio23",     5.0,  20.0,  150.0),
+        ("Spd G1/G2 km", "spd12",      5.0,   0.0,  100.0),
+        ("Spd G2/G3 km", "spd23",      5.0,   0.0,  150.0),
         ("Vol Voice",   "vol_voice",   1.0,   0.0,   30.0),
     ]
     NUM_SETTINGS = len(CFG_DEFS)   # Back is index NUM_SETTINGS
@@ -127,8 +127,8 @@ class MenuController:
         self.cooldown_ms = float(TURBO_COOLDOWN_MS)
         self.vol_gear1   = 30.0
         self.vol_gear2   = 27.0
-        self.ratio12     = TURBO_RATIO_GEAR12
-        self.ratio23     = TURBO_RATIO_GEAR23
+        self.spd12       = TURBO_SPEED_GEAR12
+        self.spd23       = TURBO_SPEED_GEAR23
         self.vol_voice   = 13.0
 
     def button_press(self):

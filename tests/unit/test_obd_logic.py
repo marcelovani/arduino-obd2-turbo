@@ -82,27 +82,27 @@ class TestEstimateGear:
         assert estimate_gear(1000, 1) == 0  # speed < 2 km/h
 
     def test_first_gear(self):
-        # Typical 1st gear: RPM 3000 at 20 km/h → ratio 150
+        # 1st gear: speed < 50 km/h
         assert estimate_gear(3000, 20) == 1
 
     def test_second_gear(self):
-        # 2nd gear: ratio 45–85. RPM 2800 at 55 km/h → ratio 50.9
+        # 2nd gear: 50 ≤ speed < 80 km/h
         assert estimate_gear(2800, 55) == 2
 
     def test_third_gear(self):
-        # 3rd gear: ratio 19–33. RPM 2500 at 100 km/h → ratio 25
+        # 3rd gear: 80 ≤ speed < 145 km/h
         assert estimate_gear(2500, 100) == 3
 
     def test_fourth_gear(self):
-        # 4th gear: ratio 12–19. RPM 2200 at 150 km/h → ratio ~14.7
+        # 4th gear: 145 ≤ speed < 165 km/h
         assert estimate_gear(2200, 150) == 4
 
     def test_fifth_gear(self):
-        # 5th gear: ratio 8–12. RPM 2000 at 200 km/h → ratio 10
-        assert estimate_gear(2000, 200) == 5
+        # 5th gear: 165 ≤ speed < 200 km/h
+        assert estimate_gear(2000, 185) == 5
 
     def test_sixth_gear(self):
-        # 6th gear: ratio < 8. RPM 1800 at 250 km/h → ratio 7.2
+        # 6th gear: speed ≥ 200 km/h
         assert estimate_gear(1800, 250) == 6
 
 
@@ -122,35 +122,35 @@ class TestTurboTrigger:
 
     def test_triggers_on_sharp_lift_in_second_gear(self):
         turbo = TurboTrigger()
-        turbo.update(80, 3200, 58, 0)    # high TPS, 2nd gear (ratio 55 → gear 2)
+        turbo.update(80, 3200, 58, 0)    # high TPS, 2nd gear (speed 58 → gear 2)
         triggered = turbo.update(4, 3100, 58, 100)   # lift off
         assert triggered
         assert turbo.count == 1
 
     def test_triggers_in_first_gear(self):
         turbo = TurboTrigger()
-        turbo.update(80, 3200, 22, 0)    # 1st gear (ratio 145 → gear 1)
+        turbo.update(80, 3200, 22, 0)    # 1st gear (speed 22 < 50 → gear 1)
         triggered = turbo.update(4, 3100, 24, 100)
         assert triggered
         assert turbo.count == 1
 
     def test_no_trigger_when_rpm_too_low(self):
         turbo = TurboTrigger()
-        turbo.update(75, 1500, 28, 0)    # high TPS, 2nd gear (ratio 54), but RPM not > 3000
+        turbo.update(75, 1500, 28, 0)    # high TPS, 1st gear (speed 28 < 50), RPM not > 3000
         triggered = turbo.update(4, 1400, 30, 100)   # lift off — RPM 1400 < 3000
         assert not triggered
         assert turbo.count == 0
 
     def test_no_trigger_in_third_gear(self):
         turbo = TurboTrigger()
-        turbo.update(80, 3200, 120, 0)   # 3rd gear (ratio 27 → gear 3)
+        turbo.update(80, 3200, 120, 0)   # 3rd gear (speed 120 ≥ 65 → gear 3)
         triggered = turbo.update(4, 3100, 122, 100)
         assert not triggered
         assert turbo.count == 0
 
     def test_no_trigger_when_prev_tps_not_high_enough(self):
         turbo = TurboTrigger()
-        turbo.update(55, 3200, 58, 0)    # TPS 55% — below 60% threshold, 2nd gear (ratio 55)
+        turbo.update(55, 3200, 58, 0)    # TPS 55% — below 60% threshold, 2nd gear (speed 58)
         triggered = turbo.update(4, 3100, 58, 100)   # lift off — prev_TPS 55 < 60% → no trigger
         assert not triggered
 
@@ -163,7 +163,7 @@ class TestTurboTrigger:
     def test_cooldown_blocks_rapid_second_trigger(self):
         turbo = TurboTrigger()
         turbo.update(80, 3200, 58, 0)
-        turbo.update(4,  3100, 58, 100)   # Turbo #1 at t=100ms (gear 2, ratio 53)
+        turbo.update(4,  3100, 58, 100)   # Turbo #1 at t=100ms (speed 58 → gear 2)
         turbo.update(80, 3200, 58, 200)   # back on throttle
         triggered = turbo.update(4, 3100, 58, 300)   # within 2s cooldown
         assert not triggered
@@ -172,7 +172,7 @@ class TestTurboTrigger:
     def test_cooldown_allows_trigger_after_expiry(self):
         turbo = TurboTrigger()
         turbo.update(80, 3200, 58, 0)
-        turbo.update(4,  3100, 58, 100)   # Turbo #1 (gear 2, ratio 53)
+        turbo.update(4,  3100, 58, 100)   # Turbo #1 (speed 58 → gear 2)
         turbo.update(80, 3200, 58, 200)
         turbo.update(4,  3100, 58, 300)   # blocked by cooldown
         turbo.update(80, 3200, 58, 2200)  # after cooldown
@@ -190,7 +190,7 @@ class TestTurboTrigger:
 
     def test_event_log_recorded(self):
         turbo = TurboTrigger()
-        turbo.update(80, 3200, 58, 0)   # 2nd gear (ratio 55 → gear 2)
+        turbo.update(80, 3200, 58, 0)   # 2nd gear (speed 58 → gear 2)
         turbo.update(4,  3100, 58, 100)
         assert len(turbo.events) == 1
         event = turbo.events[0]
