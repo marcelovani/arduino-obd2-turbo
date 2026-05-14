@@ -14,7 +14,7 @@ on a small OLED screen so the driver can see what's happening in real time.
 
 A portable device that:
 
-1. Connects via Bluetooth Classic to a generic ELM327 OBD2 dongle
+1. Connects via BLE to an "OBD BLE" dongle (service FFF0, notify FFF1, write FFF2)
 2. Reads live signals from the car via OBD2 (see three-tier polling in §7–9):
    - **RPM** — engine state detection and gear calculation
    - **Throttle position** — % pedal pressed (driving mode only)
@@ -87,7 +87,7 @@ These can be adjusted to taste once tested in the car.
 | Small speaker (4–8 Ω, 0.5–3 W)   | £2–3              | Check    | Connects to DFPlayer Mini's built-in 3W amp (SPK1/SPK2)       |
 | Breadboard + jumper wires        | —                 | Have it  |                                                               |
 | Micro-USB cable                  | —                 | Have it  | Power + flashing                                              |
-| ELM327 Bluetooth OBD2 dongle     | —                 | Have it  | Bluetooth Classic. [Manufacturer site][elm-home]              |
+| OBD BLE dongle                   | —                 | Have it  | **BLE** (not Classic BT). Name: "OBD BLE", service FFF0.     |
 | **Total new spend**              | **~£10**          |          | ESP32 + speaker (if needed)                                   |
 
 ### Hardware decisions (from planning session)
@@ -97,7 +97,10 @@ These can be adjusted to taste once tested in the car.
 - **ELEGOO ESP-WROOM-32 chosen** — Bluetooth 4.2 Classic + BLE.
 - **KY-040 rotary encoder** replaces original 3-button design.
 - **0.96" SSD1306 OLED** confirmed (model ep0096dtan001a).
-- **ELM327 confirmed Bluetooth Classic only**.
+- **OBD dongle confirmed BLE** — device name "OBD BLE", PHY LE 1M, service FFF0.
+  iOS app (CarScanner) proved it: Apple blocks Classic BT for third-party apps, so any
+  dongle that works with an iPhone app is definitively BLE. Classic BT code (BluetoothSerial)
+  cannot see BLE devices at all; switched to ESP32 BLE stack (BLEDevice.h).
 - **DFPlayer Mini** reused from [arduino-laser-target][laser-target] project.
 
 ### Optional upgrades
@@ -148,9 +151,11 @@ These can be adjusted to taste once tested in the car.
 
 ### Key design choices
 
-- **Bluetooth Classic** — works with the ELM327 dongle via `BluetoothSerial`.
-- **Auto-connect** — scans for any BT device containing "ELM", "OBD", or
-  "LINK" in the name; connects without user input.
+- **BLE (Bluetooth Low Energy)** — the "OBD BLE" dongle is BLE, not Classic BT.
+  Uses ESP32's `BLEDevice` / `BLEClient` stack. Commands go to write characteristic
+  FFF2; responses arrive via notify callbacks on FFF1.
+- **Auto-connect** — BLE scan finds any device advertising service FFF0 or whose
+  name contains "OBD", "ELM", or "LINK"; connects without user input.
 - **Turbo trigger is event-driven** — checked every OBD poll cycle (100 ms);
   compares current vs previous throttle reading.
 - **DFPlayer Mini** — standalone MP3 module with its own SD card; the ESP32
@@ -348,7 +353,7 @@ The resistor sits vertically in col H bridging rows 35→36. It stays on the lef
 
 | Library               | Purpose                                                                                                        |
 | --------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `BluetoothSerial`     | Built into ESP32 core                                                                                          |
+| `ESP32 BLE Arduino`   | BLE client — `BLEDevice.h`, `BLEClient.h`, `BLEScan.h` (built into ESP32 core)                                |
 | `U8g2`                | OLED — real device: `U8G2_SSD1306_128X64_NONAME_F_4W_HW_SPI`; Wokwi sim: `U8G2_SSD1306_128X64_NONAME_F_HW_I2C` |
 | `DFRobotDFPlayerMini` | DFPlayer Mini MP3 module driver                                                                                |
 | `Bounce2`             | KY-040 button debounce                                                                                         |
@@ -555,7 +560,7 @@ and the speaker plays the Turbo sound on demand.
 | Risk                                     | Mitigation                                                                                                         |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | Cheap ELM327 clones have buggy firmware  | Test `ATZ` early — should return `ELM327 v1.5`. If garbage, swap the dongle.                                       |
-| Bluetooth pairing fiddly first time      | Use `discover()` API with 8 s scan. All retry logic is automatic.                                                  |
+| BLE dongle only connectable by one device at a time | Disconnect from any phone app before the ESP32 tries to connect.          |
 | Some cars don't support some PIDs        | Send `0100` first — bitmap of supported PIDs. Only poll supported ones.                                            |
 | Polling too fast → `NO DATA` responses   | Cap at 10 Hz total across 3 PIDs. Use `ATAT1` for adaptive timing.                                                 |
 | `\r` vs `\r\n` mismatch with ELM327      | Always send `\r` only; wait for `>` before sending next command.                                                   |
@@ -588,7 +593,7 @@ and the speaker plays the Turbo sound on demand.
 
 ### ESP32 / Arduino
 
-- **ESP32 BluetoothSerial docs:** https://github.com/espressif/arduino-esp32/tree/master/libraries/BluetoothSerial
+- **ESP32 BLE Arduino library:** https://github.com/espressif/arduino-esp32/tree/master/libraries/BLE
 - **ELEGOO ESP-WROOM-32 (chosen board):** https://www.amazon.co.uk/ELEGOO-ESP-WROOM-32-Development-Micro-USB-Microcontroller/dp/B0D8T5P8JM
 - **ELEGOO ESP32 official wiki (pinout):** https://wiki.elegoo.com/oshw-getting-started-kits/first-look-esp32
 - **ESP32-WROOM-32 pinout reference:** https://lastminuteengineers.com/esp32-wroom-32-pinout-reference/
@@ -630,9 +635,9 @@ Four layers — run in order, see the Testing section in README.md for full comm
 
 ```cpp
 // arduino-obd2-turbo — main sketch
-// Libraries: BluetoothSerial (built-in), U8g2, DFRobotDFPlayerMini, Bounce2
+// Libraries: ESP32 BLE (built-in), U8g2, DFRobotDFPlayerMini, Bounce2
 
-#include <BluetoothSerial.h>
+#include <BLEDevice.h>
 #include <U8g2lib.h>
 #include <DFRobotDFPlayerMini.h>
 #include <Bounce2.h>

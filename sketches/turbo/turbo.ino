@@ -29,7 +29,10 @@
 #else
   #include <SPI.h>
   #ifndef DEMO
-    #include <BluetoothSerial.h>
+    #include <BLEDevice.h>
+    #include <BLEClient.h>
+    #include <BLEScan.h>
+    #include <BLEAdvertisedDevice.h>
   #endif
   #include <DFRobotDFPlayerMini.h>
 #endif
@@ -88,9 +91,6 @@
 Bounce encBtn;
 
 #ifndef SIMULATION
-  #ifndef DEMO
-    BluetoothSerial     BT;
-  #endif
   DFRobotDFPlayerMini dfplayer;
 #endif
 
@@ -635,9 +635,42 @@ void advanceScenario() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// REAL DEVICE build: Bluetooth OBD2, DFPlayer, state machine
+// REAL DEVICE build: BLE OBD2 ("OBD BLE", service FFF0), DFPlayer, state machine
 // ═══════════════════════════════════════════════════════════════════════════
 #if !defined(SIMULATION) && !defined(DEMO)
+
+// UUIDs confirmed via nRF Connect: device "OBD BLE", PHY LE 1M
+static BLEUUID BLE_SVC_UUID   ("0000fff0-0000-1000-8000-00805f9b34fb");
+static BLEUUID BLE_NOTIFY_UUID("0000fff1-0000-1000-8000-00805f9b34fb");  // RX — has CCCD
+static BLEUUID BLE_WRITE_UUID ("0000fff2-0000-1000-8000-00805f9b34fb");  // TX — write
+
+static BLEClient*               bleClient   = nullptr;
+static BLERemoteCharacteristic* bleNotifyCh = nullptr;
+static BLERemoteCharacteristic* bleWriteCh  = nullptr;
+static BLEAdvertisedDevice*     bleDevice   = nullptr;
+static bool                     bleFound     = false;
+static bool                     bleConnected = false;
+static String                   bleRxBuf     = "";
+
+static void bleNotifyCB(BLERemoteCharacteristic*, uint8_t* data, size_t len, bool) {
+  for (size_t i = 0; i < len; i++) bleRxBuf += (char)data[i];
+}
+
+class OBDScanCallbacks : public BLEAdvertisedDeviceCallbacks {
+  void onResult(BLEAdvertisedDevice dev) override {
+    if (bleFound) return;
+    String name = dev.getName().c_str();
+    String upper = name; upper.toUpperCase();
+    bool nameMatch = upper.indexOf("OBD") >= 0 || upper.indexOf("ELM") >= 0 || upper.indexOf("LINK") >= 0;
+    bool svcMatch  = dev.haveServiceUUID() && dev.isAdvertisingService(BLE_SVC_UUID);
+    if (nameMatch || svcMatch) {
+      BLEDevice::getScan()->stop();
+      delete bleDevice;
+      bleDevice = new BLEAdvertisedDevice(dev);
+      bleFound  = true;
+    }
+  }
+};
 
 float parseVoltage(const String& resp) {
   float v = strtof(resp.c_str(), nullptr);
@@ -645,21 +678,16 @@ float parseVoltage(const String& resp) {
 }
 
 String obdSend(const char* cmd, uint16_t timeout = 300) {
-  while (BT.available()) BT.read();
-  BT.print(cmd);
-  BT.print('\r');
-  String resp = "";
+  if (!bleConnected || !bleWriteCh) return "";
+  bleRxBuf = "";
+  String s = String(cmd) + "\r";
+  bleWriteCh->writeValue((uint8_t*)s.c_str(), s.length(), true);
   uint32_t t0 = millis();
   while (millis() - t0 < timeout) {
-    while (BT.available()) {
-      char c = BT.read();
-      if (c == '>') {
-        return resp;
-      }
-      if (c != '\r' && c != '\n') resp += c;
-    }
+    if (bleRxBuf.indexOf('>') >= 0) return bleRxBuf;
+    delay(10);
   }
-  return "";
+  return bleRxBuf;
 }
 
 float parsePID(const String& resp, int bytes, float multiplier) {
@@ -672,34 +700,30 @@ float parsePID(const String& resp, int bytes, float multiplier) {
   return (hi * 256.0f + lo) * multiplier;
 }
 
-// Non-blocking delay that keeps polling the encoder so the menu stays
-// accessible even during the long blocking BT.discover call.
-static void scanDelay(uint32_t ms) {
-  uint32_t t0 = millis();
-  while (millis() - t0 < ms) {
-    readEncoder();
-    if (menuState != MENU_CLOSED) return;
-    delay(30);
-  }
-}
-
 void doScanning() {
-  // Check encoder at entry so a button press during the previous BT.discover
-  // is acted on before we block again.
   readEncoder();
   if (menuState != MENU_CLOSED) return;
 
   if (scanStartMs == 0) {
     scanStartMs = millis();
+    scanFrame   = 0;
+    bleFound    = false;
     dfplayer.volume(TURBO_VOLUME_VOICE);
-    dfplayer.playMp3Folder(TRACK_PAIRING);  // "Pairing"
+    dfplayer.playMp3Folder(TRACK_PAIRING);
+  }
+
+  if (bleFound) {
+    targetName    = bleDevice->getName().c_str();
+    connectFailed = false;
+    appState      = CONNECTING;
+    return;
   }
 
   if (millis() - scanStartMs >= SCAN_TIMEOUT_MS) {
     dfplayer.volume(TURBO_VOLUME_VOICE);
-    dfplayer.playMp3Folder(TRACK_NO_OBD2);  // "OBD2 not connected"
+    dfplayer.playMp3Folder(TRACK_NO_OBD2);
     showMessage("No OBD2 found", "Display only", "Click for menu");
-    scanDelay(1500);
+    delay(1500);
     appState = NO_OBD;
     return;
   }
@@ -712,33 +736,12 @@ void doScanning() {
   display.clearBuffer();
   display.setFont(u8g2_font_ncenB08_tr);
   display.drawStr(0, 28, line1);
-  display.drawStr(0, 44, "Plug ELM327 into");
+  display.drawStr(0, 44, "Plug OBD BLE in");
   display.drawStr(0, 59, "OBD2 port & wait");
   display.sendBuffer();
 
-  // BT.discover blocks for the full 8 s — poll encoder immediately after
-  BTScanResults* results = BT.discover(8000);
-  readEncoder();
-  if (menuState != MENU_CLOSED) return;
-
-  if (!results || results->getCount() == 0) {
-    showMessage("No device found", "Retrying...");
-    scanDelay(2000);
-    return;
-  }
-  for (int i = 0; i < results->getCount(); i++) {
-    BTAdvertisedDevice* dev = results->getDevice(i);
-    String name  = dev->getName().c_str();
-    String upper = name; upper.toUpperCase();
-    if (upper.indexOf("ELM") >= 0 || upper.indexOf("OBD") >= 0 || upper.indexOf("LINK") >= 0) {
-      targetName    = name;
-      connectFailed = false;
-      appState      = CONNECTING;
-      return;
-    }
-  }
-  showMessage("ELM327 not found", "Retrying...");
-  scanDelay(2000);
+  // 3-second BLE scan burst; stop() called from callback if device found early
+  BLEDevice::getScan()->start(3, false);
 }
 
 void doNoObd() {
@@ -758,35 +761,55 @@ void doNoObd() {
 void doConnecting() {
   char nameBuf[18];
   strncpy(nameBuf, targetName.c_str(), 17); nameBuf[17] = '\0';
+  showMessage("Found:", nameBuf, "Connecting BLE...");
 
-  // Try no-PIN first (many ELM327 clones accept without pairing),
-  // then the most common PINs for cheap OBD dongles.
-  struct { const char* label; const char* pin; } attempts[] = {
-    { "no PIN",  nullptr },
-    { "PIN 1234", "1234" },
-    { "PIN 0000", "0000" },
-    { "PIN 6789", "6789" },
-    { "PIN 1111", "1111" },
-  };
-  for (auto& a : attempts) {
-    char line3[20];
-    snprintf(line3, sizeof(line3), "Trying %s...", a.label);
-    showMessage("Found:", nameBuf, line3);
-    if (a.pin) BT.setPin(a.pin, strlen(a.pin));
-    if (BT.connect(targetName)) {
-      connectFailed = false;
-      appState = INIT_ELM;
-      return;
-    }
-    delay(300);
+  if (bleClient) { bleClient->disconnect(); bleClient = nullptr; }
+  bleClient = BLEDevice::createClient();
+
+  if (!bleClient->connect(bleDevice)) {
+    connectFailed = true;
+    dfplayer.volume(TURBO_VOLUME_VOICE);
+    dfplayer.playMp3Folder(TRACK_NO_OBD2);
+    showMessage("Connect failed", "Scanning again...");
+    delay(2000);
+    appState    = SCANNING;
+    scanStartMs = 0;
+    bleFound    = false;
+    return;
   }
-  connectFailed = true;
-  dfplayer.volume(TURBO_VOLUME_VOICE);
-  dfplayer.playMp3Folder(TRACK_NO_OBD2);  // "OBD2 not connected"
-  showMessage("Connect failed", "Scanning again...");
-  delay(2000);
-  appState    = SCANNING;
-  scanStartMs = 0;  // reset so "Pairing" plays again on re-entry
+
+  BLERemoteService* svc = bleClient->getService(BLE_SVC_UUID);
+  if (!svc) {
+    bleClient->disconnect();
+    connectFailed = true;
+    showMessage("Service missing", "Scanning again...");
+    delay(2000);
+    appState    = SCANNING;
+    scanStartMs = 0;
+    bleFound    = false;
+    return;
+  }
+
+  bleWriteCh  = svc->getCharacteristic(BLE_WRITE_UUID);
+  bleNotifyCh = svc->getCharacteristic(BLE_NOTIFY_UUID);
+
+  if (!bleWriteCh || !bleNotifyCh) {
+    bleClient->disconnect();
+    connectFailed = true;
+    showMessage("Chars missing", "Scanning again...");
+    delay(2000);
+    appState    = SCANNING;
+    scanStartMs = 0;
+    bleFound    = false;
+    return;
+  }
+
+  if (bleNotifyCh->canNotify())
+    bleNotifyCh->registerForNotify(bleNotifyCB);
+
+  bleConnected  = true;
+  connectFailed = false;
+  appState      = INIT_ELM;
 }
 
 void doInitElm() {
@@ -819,6 +842,17 @@ void doInitElm() {
 }
 
 void doRunning() {
+  // Drop back to scanning if the BLE link went away
+  if (!bleClient || !bleClient->isConnected()) {
+    bleConnected = false;
+    bleWriteCh   = nullptr;
+    bleNotifyCh  = nullptr;
+    appState     = SCANNING;
+    scanStartMs  = 0;
+    bleFound     = false;
+    return;
+  }
+
   uint32_t now = millis();
   bool encActive = (now - lastEncActiveMs < ENCODER_PRIORITY_MS);
 
@@ -837,7 +871,6 @@ void doRunning() {
     }
   } else if (metricRPM < ENGINE_DRIVING_RPM) {
     // ── IDLE: engine running, not moving — poll RPM only every 500ms ──────
-    // Rotary is fully unblocked; TPS/speed not needed, no Turbo possible.
     if (!encActive && now - lastPollMs >= 500) {
       String r; float v;
       r = obdSend("010C"); v = parsePID(r, 2, 0.25f); if (v >= 0) metricRPM = v;
@@ -919,8 +952,13 @@ void setup() {
   delay(500);  // DFPlayer needs ~500ms after power-on before it responds
   if (dfplayer.begin(Serial2)) dfplayer.volume(TURBO_VOLUME_VOICE);
 
-  // ── 5. Bluetooth — last, after display and audio are confirmed working ────
-  BT.begin("ESP32-OBD", true);
+  // ── 5. BLE — last, after display and audio are confirmed working ──────────
+  BLEDevice::init("");
+  BLEScan* bleScan = BLEDevice::getScan();
+  bleScan->setAdvertisedDeviceCallbacks(new OBDScanCallbacks(), false);
+  bleScan->setActiveScan(true);
+  bleScan->setInterval(100);
+  bleScan->setWindow(99);
 
 #endif
 }
