@@ -32,15 +32,37 @@ distinctive "pssssh" sound. This device detects that moment from OBD2 data:
 
 ## Hardware
 
-| Component               | Notes                                                |
-| ----------------------- | ---------------------------------------------------- |
-| ELEGOO ESP-WROOM-32     | Main microcontroller — Bluetooth Classic             |
-| ELM327 Bluetooth dongle | Plugs into car OBD2 port                             |
-| 0.96" SSD1306 OLED      | 128×64 SPI display (pins: GND,VCC,D0,D1,RES,DC,CS)   |
-| DFPlayer Mini           | MP3 playback module — 3.3V power, 1kΩ on RX line     |
-| KY-040 rotary encoder   | Navigation: rotate = cycle views, click = disconnect |
-| microSD card (FAT32)    | Stores Turbo sound as `/mp3/0001.mp3`                |
-| Small speaker (4–8 Ω)   | Plays the Turbo sound                                |
+| Component               | Notes                                                   |
+| ----------------------- | ------------------------------------------------------- |
+| ELEGOO ESP-WROOM-32     | Main microcontroller — Bluetooth Classic                |
+| ELM327 Bluetooth dongle | Plugs into car OBD2 port                                |
+| 0.96" SSD1306 OLED      | 128×64 SPI display (pins: GND,VCC,D0,D1,RES,DC,CS)      |
+| DFPlayer Mini           | MP3 playback module — 3.3V power, 1kΩ on RX line        |
+| KY-040 rotary encoder   | Navigation: rotate = cycle views, click = disconnect    |
+| microSD card (FAT32)    | Stores audio files in `/mp3/` — see Audio files section |
+| Small speaker (4–8 Ω)   | Plays the Turbo sound                                   |
+
+---
+
+## Audio files (SD card)
+
+The `audio/` folder in this repo contains the source MP3 files. Copy them to
+the microSD card inside a `/mp3/` folder, renaming each to a 4-digit number as
+the DFPlayer Mini requires:
+
+| Repo file | SD card name    | Content              | When played                                     |
+| --------- | --------------- | -------------------- | ----------------------------------------------- |
+| `01.mp3`  | `/mp3/0001.mp3` | "Pairing"            | Each time the device starts scanning for ELM327 |
+| `04.mp3`  | `/mp3/0004.mp3` | "OBD2 not connected" | Scan timeout (30 s) or Bluetooth connect fail   |
+| `08.mp3`  | `/mp3/0008.mp3` | "Demo mode"          | When demo mode is turned on via the menu        |
+| `09.mp3`  | `/mp3/0009.mp3` | "Goodbye"            | When the Power option is used to turn off       |
+| `10.mp3`  | `/mp3/0010.mp3` | Long spray           | Turbo trigger in 1st gear (1st → 2nd change)    |
+| `11.mp3`  | `/mp3/0011.mp3` | Faster spray         | Turbo trigger in 2nd gear (2nd → 3rd change)    |
+
+Format the card as **FAT32**. The `/mp3/` folder must be at the root of the
+card. Gaps in the numbering are fine — DFPlayer looks up files by name.
+
+Voice clips were generated with [MiniMax Text-to-Speech](https://www.minimax.io/audio/text-to-speech).
 
 ---
 
