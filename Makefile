@@ -52,7 +52,7 @@ FQBN           := esp32:esp32:esp32doit-devkit-v1
 PORT ?= $(shell ls /dev/cu.usbserial-* /dev/cu.SLAB_USBtoUART* 2>/dev/null | head -1)
 
 .PHONY: build test test-unit test-emulator scenario emulator \
-        wokwi-setup wokwi-build demo-build demo-upload deploy clean help
+        wokwi-setup wokwi-build deploy clean help
 
 # ─── help ────────────────────────────────────────────────────────────────────
 help:
@@ -69,7 +69,6 @@ help:
 	@echo "  make wokwi-build      Compile Wokwi sketch for VS Code extension"
 	@echo "  make deploy           Compile + flash production firmware (real OBD2)"
 	@echo "  make deploy PORT=/dev/cu.usbserial-XXXX   (specify port manually)"
-	@echo "  make demo-upload      Compile + flash demo firmware (scenario, no OBD2)"
 	@echo "  make clean            Remove venv and caches"
 	@echo ""
 
@@ -190,37 +189,6 @@ wokwi-build:
 	    --output-dir $(WOKWI_BUILD) \
 	    $(SKETCH)
 	@echo "✓ Firmware ready: $(WOKWI_BUILD)/turbo.ino.bin"
-
-# ─── Demo mode: scenario playback on real ESP32 hardware ─────────────────
-# Compiles with -DDEMO: uses real SPI OLED + DFPlayer, but replays the
-# built-in driving scenario instead of connecting to Bluetooth/ELM327.
-#
-# Usage:
-#   make demo-build                        compile only
-#   make demo-upload                       compile + flash (auto-detect port)
-#   make demo-upload PORT=/dev/cu.usbserial-XXXX   specify port manually
-demo-build:
-	@which $(ARDUINO_CLI) > /dev/null 2>&1 || \
-	    (echo "arduino-cli not found — run: make wokwi-setup" && exit 1)
-	@echo "→ Compiling $(SKETCH)/turbo.ino (DEMO mode)..."
-	$(ARDUINO_CLI) compile \
-	    --fqbn $(FQBN) \
-	    --build-property "compiler.cpp.extra_flags=-DDEMO" \
-	    $(SKETCH)
-	@echo "✓ Demo firmware compiled."
-
-demo-upload: demo-build
-	@if [ -z "$(PORT)" ]; then \
-	    echo "ERROR: no ESP32 port found. Plug in USB and retry, or run:"; \
-	    echo "  make demo-upload PORT=/dev/cu.usbserial-XXXX"; \
-	    exit 1; \
-	fi
-	@echo "→ Uploading DEMO firmware to $(PORT)..."
-	$(ARDUINO_CLI) upload \
-	    --fqbn $(FQBN) \
-	    --port $(PORT) \
-	    $(SKETCH)
-	@echo "✓ Demo uploaded. Open Serial Monitor at 115200 baud."
 
 # ─── Production deploy: compile + flash to real ESP32 ────────────────────────
 # Compiles sketches/turbo/turbo.ino without any special flags (production mode)

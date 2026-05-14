@@ -13,7 +13,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
-from obd_logic import parse_pid, estimate_gear, TurboTrigger
+from obd_logic import parse_pid, estimate_gear, TurboTrigger, MenuController
 from scenarios.definitions import SCENARIOS, EXPECTED_TURBO_COUNTS
 
 
@@ -197,6 +197,192 @@ class TestTurboTrigger:
         assert event["gear"] == 2
         assert event["prev_tps"] == 80
         assert event["tps"] == 4
+
+
+# ── MenuController ────────────────────────────────────────────────────────
+
+class TestMenuBehavior:
+
+    # ── Initial state ──────────────────────────────────────────────────────
+
+    def test_initial_state(self):
+        menu = MenuController()
+        assert menu.system_on    is True
+        assert menu.demo_mode    is False
+        assert menu.menu_state   == "closed"
+        assert menu.main_sel     == 0
+        assert menu.settings_sel == 0
+
+    # ── Opening the menu ──────────────────────────────────────────────────
+
+    def test_button_press_opens_main_menu(self):
+        menu = MenuController()
+        menu.button_press()
+        assert menu.menu_state == "main"
+        assert menu.main_sel   == 0
+
+    def test_rotate_does_nothing_when_closed(self):
+        menu = MenuController()
+        menu.rotate(1)
+        assert menu.main_sel == 0
+
+    # ── Main menu navigation ──────────────────────────────────────────────
+
+    def test_rotate_moves_main_selection(self):
+        menu = MenuController()
+        menu.button_press()
+        menu.rotate(1)
+        assert menu.main_sel == 1
+
+    def test_rotate_wraps_forward(self):
+        menu = MenuController()
+        menu.button_press()          # main menu, sel=0
+        for _ in range(4):
+            menu.rotate(1)           # 1→2→3→0
+        assert menu.main_sel == 0
+
+    def test_rotate_wraps_backward(self):
+        menu = MenuController()
+        menu.button_press()          # sel=0
+        menu.rotate(-1)              # wraps to 3 (Exit)
+        assert menu.main_sel == 3
+
+    # ── Power option ──────────────────────────────────────────────────────
+
+    def test_power_off_via_menu(self):
+        menu = MenuController()
+        menu.button_press()          # open (sel=0 = Power)
+        menu.button_press()          # execute → Power OFF
+        assert menu.system_on  is False
+        assert menu.menu_state == "closed"
+
+    def test_button_while_off_wakes_and_shows_menu(self):
+        menu = MenuController()
+        menu.button_press(); menu.button_press()   # open → power off
+        menu.button_press()                        # wake
+        assert menu.system_on  is True
+        assert menu.menu_state == "main"
+        assert menu.main_sel   == 0
+
+    def test_power_on_via_menu_after_wake(self):
+        menu = MenuController()
+        menu.button_press(); menu.button_press()   # power off
+        menu.button_press()                        # wake → menu open (sel=0=Power)
+        menu.button_press()                        # execute → Power OFF again (toggle)
+        assert menu.system_on is False
+
+    # ── Demo mode option ──────────────────────────────────────────────────
+
+    def test_demo_mode_toggle_on(self):
+        menu = MenuController()
+        menu.button_press()          # open
+        menu.rotate(1)               # sel=1 (Demo mode)
+        menu.button_press()          # execute
+        assert menu.demo_mode  is True
+        assert menu.menu_state == "closed"
+
+    def test_demo_mode_toggle_off(self):
+        menu = MenuController()
+        menu.button_press(); menu.rotate(1); menu.button_press()  # demo ON
+        menu.button_press(); menu.rotate(1); menu.button_press()  # demo OFF
+        assert menu.demo_mode is False
+
+    def test_demo_mode_independent_of_power(self):
+        menu = MenuController()
+        menu.button_press(); menu.rotate(1); menu.button_press()   # demo ON
+        assert menu.system_on is True                              # power unchanged
+        menu.button_press()                                        # open again
+        menu.button_press()                                        # power off
+        assert menu.demo_mode is True                              # demo unchanged
+
+    # ── Settings option ───────────────────────────────────────────────────
+
+    def test_settings_opens_submenu(self):
+        menu = MenuController()
+        menu.button_press()          # open
+        menu.rotate(2)               # sel=2 (Settings)
+        menu.button_press()          # enter settings
+        assert menu.menu_state   == "settings"
+        assert menu.settings_sel == 0
+
+    def test_settings_rotate_scrolls(self):
+        menu = MenuController()
+        menu.button_press(); menu.rotate(2); menu.button_press()  # enter settings
+        menu.rotate(1)
+        assert menu.settings_sel == 1
+
+    def test_settings_rotate_wraps(self):
+        menu = MenuController()
+        menu.button_press(); menu.rotate(2); menu.button_press()
+        # wrap past "Back" (index NUM_SETTINGS) back to 0
+        for _ in range(MenuController.NUM_SETTINGS + 1):
+            menu.rotate(1)
+        assert menu.settings_sel == 0
+
+    def test_settings_back_returns_to_main(self):
+        menu = MenuController()
+        menu.button_press(); menu.rotate(2); menu.button_press()  # enter settings
+        # navigate to Back (last item)
+        for _ in range(MenuController.NUM_SETTINGS):
+            menu.rotate(1)
+        assert menu.settings_sel == MenuController.NUM_SETTINGS
+        menu.button_press()          # execute Back
+        assert menu.menu_state == "main"
+
+    def test_settings_edit_on_press(self):
+        menu = MenuController()
+        menu.button_press(); menu.rotate(2); menu.button_press()  # enter settings
+        menu.button_press()          # edit first item (TPS High)
+        assert menu.menu_state == "edit"
+
+    def test_settings_edit_rotate_changes_value(self):
+        menu = MenuController()
+        menu.button_press(); menu.rotate(2); menu.button_press()  # settings
+        menu.button_press()          # edit TPS High (default 60, step 5)
+        menu.rotate(1)
+        assert menu.tps_high == 65.0
+
+    def test_settings_edit_rotate_clamps_max(self):
+        menu = MenuController()
+        menu.button_press(); menu.rotate(2); menu.button_press()
+        menu.button_press()          # edit TPS High (max 100)
+        for _ in range(20):
+            menu.rotate(1)
+        assert menu.tps_high == 100.0
+
+    def test_settings_edit_rotate_clamps_min(self):
+        menu = MenuController()
+        menu.button_press(); menu.rotate(2); menu.button_press()
+        menu.button_press()          # edit TPS High (min 10)
+        for _ in range(20):
+            menu.rotate(-1)
+        assert menu.tps_high == 10.0
+
+    def test_settings_edit_confirm_returns_to_list(self):
+        menu = MenuController()
+        menu.button_press(); menu.rotate(2); menu.button_press()
+        menu.button_press()          # enter edit
+        menu.rotate(1)               # change value
+        menu.button_press()          # confirm
+        assert menu.menu_state == "settings"
+
+    # ── Exit option ───────────────────────────────────────────────────────
+
+    def test_exit_closes_menu(self):
+        menu = MenuController()
+        menu.button_press()          # open
+        menu.rotate(3)               # sel=3 (Exit)
+        menu.button_press()          # execute
+        assert menu.menu_state == "closed"
+
+    def test_exit_leaves_state_unchanged(self):
+        menu = MenuController()
+        menu.button_press(); menu.rotate(1); menu.button_press()   # demo ON
+        menu.button_press()                                         # open again
+        menu.rotate(3)                                              # Exit
+        menu.button_press()
+        assert menu.demo_mode  is True   # unchanged
+        assert menu.system_on  is True   # unchanged
 
 
 # ── Scenario-level tests ─────────────────────────────────────────────────

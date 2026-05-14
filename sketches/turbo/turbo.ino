@@ -10,7 +10,7 @@
 //                    Breadboard: OLED pins plug into col J rows 3-9 alongside ESP32
 //   KY-040 encoder — CLK=GPIO25, DT=GPIO26, SW=GPIO27
 //                    Breadboard: col D rows 30-34
-//   DFPlayer Mini  — Serial2 (RX2=GPIO16, TX2=GPIO17), VCC=3.3V, microSD /mp3/0001.mp3
+//   DFPlayer Mini  — Serial2 (RX2=GPIO16, TX2=GPIO17), VCC=3.3V, microSD root: 01.mp3 (FAT order)
 //                    1kΩ resistor on RX line (breadboard E21–F21)
 //                    Breadboard: cols D-G rows 20-27
 //   ELM327 dongle  — Bluetooth Classic, OBD2 port
@@ -19,7 +19,7 @@
 //   SSD1306 OLED (I2C, GPIO21/22 — Wokwi SSD1306 is I2C only), KY-040 encoder, buzzer on GPIO17, LED on GPIO4
 //   OBD2 data replayed from a built-in scenario.
 //
-// Encoder: rotate = cycle views, click = reset counter (sim) / disconnect BT (device)
+// Encoder: rotate = cycle views / navigate menu, click = open menu / confirm
 
 #include <U8g2lib.h>
 #include <Bounce2.h>
@@ -52,7 +52,15 @@
   #define PIN_LED        2   // built-in blue LED — blinks when Turbo fires
 #endif
 
-// ── Turbo thresholds ──────────────────────────────────────────────────────
+// ── Audio track numbers (/mp3/00NN.mp3 on SD card) ───────────────────────
+#define TRACK_PAIRING      1   // "Pairing"            — scanning for ELM327
+#define TRACK_NO_OBD2      4   // "OBD2 not connected" — scan timeout or connect fail
+#define TRACK_DEMO_MODE    8   // "Demo mode"          — demo mode activated
+#define TRACK_GOODBYE      9   // "Goodbye"            — power off
+#define TRACK_SPRAY_GEAR1 10   // long spray           — 1st→2nd gear change
+#define TRACK_SPRAY_GEAR2 11   // faster spray         — 2nd→3rd gear change
+
+// ── Turbo thresholds (compile-time defaults — overridden at runtime via cfg*) ──
 #define TURBO_THROTTLE_HIGH  60.0f
 #define TURBO_THROTTLE_LOW   10.0f
 #define TURBO_RPM_MIN        3000.0f
@@ -61,6 +69,7 @@
 #define TURBO_COOLDOWN_MS    2000
 #define TURBO_VOLUME_GEAR1   30    // 100% — DFPlayer max is 30
 #define TURBO_VOLUME_GEAR2   27    // 90%
+#define TURBO_VOLUME_VOICE   13    // 50% — spoken announcements
 
 // ── Engine state thresholds ───────────────────────────────────────────────
 #define ENGINE_IDLE_RPM    200.0f   // below = engine off → parked screen, poll battery/coolant/RPM
@@ -116,8 +125,8 @@ Bounce encBtn;
 #endif
 
 // ── Shared state ──────────────────────────────────────────────────────────
-int      currentView  = 0;     // 0=throttle, 1=speed, 2=all, 3=bars
-int      encoderPos   = 0;     // 0..(4*STEPS_PER_ZONE-1)
+int      currentView  = 0;     // 0=throttle+bars, 1=text only
+int      encoderPos   = 0;     // 0..(NUM_VIEWS*STEPS_PER_ZONE-1)
 int      lastClk      = HIGH;
 
 float    metricTPS      = 0;
@@ -131,14 +140,68 @@ uint32_t turboCount     = 0;
 uint32_t turboUntilMs   = 0;
 uint32_t lastDrawMs     = 0;
 
+// ── System power + demo ───────────────────────────────────────────────────
+bool systemOn = true;   // false = screen blank, polling stopped
+#ifdef SIMULATION
+  bool demoMode = true;   // ON by default in Wokwi (no real OBD2 available)
+#else
+  bool demoMode = false;  // OFF on real hardware (DEMO and production builds)
+#endif
+
+// ── Runtime-adjustable trigger parameters ─────────────────────────────────
+// Initialized from compile-time defaults; changed via the Settings menu.
+float cfgThrottleHigh = TURBO_THROTTLE_HIGH;
+float cfgThrottleLow  = TURBO_THROTTLE_LOW;
+float cfgRpmMin       = TURBO_RPM_MIN;
+float cfgMinGear      = (float)TURBO_MIN_GEAR;
+float cfgMaxGear      = (float)TURBO_MAX_GEAR;
+float cfgCooldownMs   = (float)TURBO_COOLDOWN_MS;
+float cfgVolGear1     = (float)TURBO_VOLUME_GEAR1;
+float cfgVolGear2     = (float)TURBO_VOLUME_GEAR2;
+
+struct SettingDef {
+  const char* label;
+  float*      val;
+  float       step;
+  float       vmin;
+  float       vmax;
+  bool        isInt;
+};
+static SettingDef CFG_DEFS[] = {
+  {"TPS High %",  &cfgThrottleHigh,   5.0f,  10.0f, 100.0f, false},
+  {"TPS Low  %",  &cfgThrottleLow,    1.0f,   0.0f,  50.0f, false},
+  {"RPM Min",     &cfgRpmMin,       100.0f, 500.0f, 6000.0f, true },
+  {"Min Gear",    &cfgMinGear,        1.0f,   1.0f,    6.0f, true },
+  {"Max Gear",    &cfgMaxGear,        1.0f,   1.0f,    6.0f, true },
+  {"Cooldown ms", &cfgCooldownMs,   100.0f, 500.0f,10000.0f, true },
+  {"Vol Gear 1",  &cfgVolGear1,       1.0f,   0.0f,   30.0f, true },
+  {"Vol Gear 2",  &cfgVolGear2,       1.0f,   0.0f,   30.0f, true },
+};
+#define NUM_CFG_DEFS  (int)(sizeof(CFG_DEFS) / sizeof(CFG_DEFS[0]))
+
+// ── Menu state machine ─────────────────────────────────────────────────────
+// CLOSED   : normal operation, encoder rotates views
+// MAIN     : top-level menu (Power / Demo / Settings / Exit)
+// SETTINGS : settings list (scroll through CFG_DEFS + Back)
+// EDIT     : editing one setting value with the encoder
+enum MenuState { MENU_CLOSED, MENU_MAIN, MENU_SETTINGS, MENU_EDIT };
+MenuState menuState  = MENU_CLOSED;
+int       mainSel    = 0;   // selected item in main menu (0-3)
+int       settSel    = 0;   // selected item in settings list (0..NUM_CFG_DEFS)
+#define   NUM_MAIN_ITEMS  4  // Power, Demo mode, Settings, Exit
+
+// ── Scenario playback state (all builds — needed for runtime demo mode) ──
+int      scenIdx   = 0;
+uint32_t scenStart = 0;
+
 #if defined(SIMULATION) || defined(DEMO)
-  uint32_t turboSoundUntilMs = 0;
-  int      scenIdx            = 0;
-  uint32_t scenStart          = 0;
+  #ifdef SIMULATION
+    uint32_t turboSoundUntilMs = 0;
+  #endif
   enum SimPhase { SIM_SCANNING, SIM_CONNECTING, SIM_INIT, SIM_RUNNING };
   SimPhase simPhase      = SIM_SCANNING;
   uint32_t simPhaseStart = 0;
-#elif !defined(DEMO)
+#else
   enum AppState { SCANNING, CONNECTING, INIT_ELM, RUNNING, NO_OBD };
   AppState appState        = SCANNING;
   bool     connectFailed   = false;  // true after a failed connect attempt — LED stays solid
@@ -148,14 +211,14 @@ uint32_t lastDrawMs     = 0;
   uint32_t lastEncActiveMs = 0;   // millis() of last encoder turn
   uint32_t scanStartMs     = 0;   // when SCANNING state was entered (for 30s bypass)
   int      scanFrame       = 0;
-  #define  ENCODER_PRIORITY_MS  500  // pause OBD2 for 500ms after encoder activity
-  #define  SCAN_TIMEOUT_MS      30000 // give up scanning after 30s if no ELM327 found
+  #define  ENCODER_PRIORITY_MS  500   // pause OBD2 for 500ms after encoder activity
+  #define  SCAN_TIMEOUT_MS      60000 // give up scanning after 60s if no ELM327 found
 #endif
 
 // ── Gear estimation ───────────────────────────────────────────────────────
 // RPM/speed ratio thresholds. These are rough defaults; calibrate for your
-// specific car by driving steadily in each gear and logging RPM/speed from
-// the serial monitor. Target speeds: gear 1 ≈ 0-40 mph, gear 2 ≈ 40-60 mph.
+// specific car by driving steadily in each gear and logging RPM/speed.
+// Target speeds: gear 1 ≈ 0-40 mph, gear 2 ≈ 40-60 mph.
 int estimateGear(float rpm, float speed) {
   if (speed < 2.0f || rpm < 100.0f) return 0;
   float ratio = rpm / speed;
@@ -178,12 +241,12 @@ void checkTurbo(uint32_t now) {
   lastCheckMs = now;
 #endif
   int gear = estimateGear(metricRPM, metricSpeed);
-  if (prevTPS       > TURBO_THROTTLE_HIGH &&
-      metricTPS     < TURBO_THROTTLE_LOW  &&
-      metricRPM     > TURBO_RPM_MIN       &&
-      gear         >= TURBO_MIN_GEAR      &&
-      gear         <= TURBO_MAX_GEAR      &&
-      now - lastTurboMs > TURBO_COOLDOWN_MS) {
+  if (prevTPS       > cfgThrottleHigh &&
+      metricTPS     < cfgThrottleLow  &&
+      metricRPM     > cfgRpmMin       &&
+      gear         >= (int)cfgMinGear &&
+      gear         <= (int)cfgMaxGear &&
+      now - lastTurboMs > (uint32_t)cfgCooldownMs) {
     turboCount++;
     lastTurboMs  = now;
     turboUntilMs = now + 2000;
@@ -191,39 +254,81 @@ void checkTurbo(uint32_t now) {
     turboSoundUntilMs = now + 1000;
     tone(PIN_BUZZER, 900, 350);
 #else
-    dfplayer.volume(gear == 1 ? TURBO_VOLUME_GEAR1 : TURBO_VOLUME_GEAR2);
-    dfplayer.play(1);
+    dfplayer.volume(gear == 1 ? (int)cfgVolGear1 : (int)cfgVolGear2);
+    dfplayer.playMp3Folder(gear == 1 ? TRACK_SPRAY_GEAR1 : TRACK_SPRAY_GEAR2);
 #endif
-    Serial.printf("[Turbo] #%lu  gear=%d  TPS %.0f→%.0f  RPM %.0f\n",
-                  turboCount, gear, prevTPS, metricTPS, metricRPM);
   }
   prevTPS = metricTPS;
+}
+
+// ── Menu execution helpers ─────────────────────────────────────────────────
+void execMainMenu() {
+  switch (mainSel) {
+    case 0:  // Power toggle
+      systemOn = !systemOn;
+      if (!systemOn) {
+        menuState = MENU_CLOSED;
+#ifndef SIMULATION
+        dfplayer.volume(TURBO_VOLUME_VOICE);
+        dfplayer.playMp3Folder(TRACK_GOODBYE);
+#endif
+        display.clearBuffer();
+        display.sendBuffer();
+      }
+      break;
+    case 1:  // Demo mode toggle
+      demoMode = !demoMode;
+      menuState = MENU_CLOSED;
+      if (demoMode) {
+        scenIdx   = 0;
+        scenStart = millis();
+        prevTPS   = 0;
+#if defined(SIMULATION) || defined(DEMO)
+        simPhase      = SIM_SCANNING;
+        simPhaseStart = millis();
+#endif
+#ifndef SIMULATION
+        dfplayer.volume(TURBO_VOLUME_VOICE);
+        dfplayer.playMp3Folder(TRACK_DEMO_MODE);
+#endif
+      }
+      break;
+    case 2:  // Settings submenu
+      menuState = MENU_SETTINGS;
+      settSel   = 0;
+      break;
+    case 3:  // Exit
+      menuState = MENU_CLOSED;
+      break;
+  }
+}
+
+void execSettingsMenu() {
+  if (settSel == NUM_CFG_DEFS) {
+    menuState = MENU_MAIN;  // Back
+  } else {
+    menuState = MENU_EDIT;
+  }
 }
 
 // ── Encoder ───────────────────────────────────────────────────────────────
 void readEncoder() {
   encBtn.update();
   if (encBtn.fell()) {
-#ifdef SIMULATION
-    turboCount  = 0;
-    lastTurboMs = 0;
-    Serial.println("[ENC] Turbo counter reset");
-#elif defined(DEMO)
-    turboCount    = 0;
-    lastTurboMs   = 0;
-    scenIdx       = 0;
-    scenStart     = millis();
-    prevTPS       = 0;
-    simPhase      = SIM_SCANNING;
-    simPhaseStart = millis();
-    Serial.println("[ENC] Demo restarted");
-#else
-    BT.disconnect();
-    appState    = SCANNING;
-    scanStartMs = millis();
-    currentView = 0;
-    Serial.println("Disconnected — returning to scan");
-#endif
+    if (!systemOn) {
+      systemOn  = true;
+      menuState = MENU_MAIN;
+      mainSel   = 0;
+    } else if (menuState == MENU_CLOSED) {
+      menuState = MENU_MAIN;
+      mainSel   = 0;
+    } else if (menuState == MENU_MAIN) {
+      execMainMenu();
+    } else if (menuState == MENU_SETTINGS) {
+      execSettingsMenu();
+    } else if (menuState == MENU_EDIT) {
+      menuState = MENU_SETTINGS;
+    }
   }
 
 #ifdef SIMULATION
@@ -231,9 +336,7 @@ void readEncoder() {
   int clk = digitalRead(PIN_ENC_CLK);
   if (clk != lastClk && clk == LOW) {
     int delta = (digitalRead(PIN_ENC_DT) != clk) ? -1 : 1;
-    int total = NUM_VIEWS * STEPS_PER_ZONE;
-    encoderPos  = ((encoderPos + delta) % total + total) % total;
-    currentView = encoderPos / STEPS_PER_ZONE;
+    applyDelta(delta);
   }
   lastClk = clk;
 #else
@@ -243,15 +346,115 @@ void readEncoder() {
     int delta = encDelta;
     encDelta  = 0;
     interrupts();
+    applyDelta(delta);
+#if !defined(SIMULATION) && !defined(DEMO)
+    if (menuState == MENU_CLOSED) lastEncActiveMs = millis();
+#endif
+  }
+#endif
+}
+
+void applyDelta(int delta) {
+  // Rate-limit menu navigation: one step per 150 ms prevents encoder bounce
+  // from skipping multiple items per physical detent.
+  if (menuState != MENU_CLOSED) {
+    static uint32_t lastMenuStepMs = 0;
+    uint32_t now = millis();
+    if (now - lastMenuStepMs < 150) return;
+    lastMenuStepMs = now;
+    delta = (delta > 0) ? 1 : -1;
+  }
+  if (menuState == MENU_MAIN) {
+    mainSel = (mainSel + delta % NUM_MAIN_ITEMS + NUM_MAIN_ITEMS) % NUM_MAIN_ITEMS;
+  } else if (menuState == MENU_SETTINGS) {
+    int total = NUM_CFG_DEFS + 1;  // +1 for Back
+    settSel = (settSel + delta % total + total) % total;
+  } else if (menuState == MENU_EDIT) {
+    float* v = CFG_DEFS[settSel].val;
+    *v = constrain(*v + delta * CFG_DEFS[settSel].step,
+                   CFG_DEFS[settSel].vmin, CFG_DEFS[settSel].vmax);
+  } else {
     int total = NUM_VIEWS * STEPS_PER_ZONE;
     encoderPos  = ((encoderPos + delta) % total + total) % total;
     currentView = encoderPos / STEPS_PER_ZONE;
-#if !defined(SIMULATION) && !defined(DEMO)
-    lastEncActiveMs = millis();
-#endif
-    Serial.printf("[ENC] delta=%+d pos=%d view=%d\n", delta, encoderPos, currentView);
   }
-#endif
+}
+
+// ── Menu display functions ────────────────────────────────────────────────
+void drawMainMenu() {
+  char items[NUM_MAIN_ITEMS][24];
+  snprintf(items[0], sizeof(items[0]), "Power %s",    systemOn ? "OFF" : "ON");
+  snprintf(items[1], sizeof(items[1]), "Demo  %s",    demoMode ? "OFF" : "ON");
+  strncpy (items[2], "Settings >",  sizeof(items[2]));
+  strncpy (items[3], "Exit",        sizeof(items[3]));
+
+  display.clearBuffer();
+  display.setFont(u8g2_font_ncenB08_tr);
+  display.drawStr(34, 11, "SETTINGS");
+  display.drawHLine(0, 13, 128);
+
+  for (int i = 0; i < NUM_MAIN_ITEMS; i++) {
+    int y = 26 + i * 12;
+    if (i == mainSel) {
+      display.drawBox(0, y - 9, 128, 11);
+      display.setDrawColor(0);
+    }
+    display.drawStr(4, y, items[i]);
+    if (i == mainSel) display.setDrawColor(1);
+  }
+  display.sendBuffer();
+}
+
+void drawSettingsMenu() {
+  int total  = NUM_CFG_DEFS + 1;  // +1 for Back
+  int start  = constrain(settSel - 1, 0, total - 3);
+
+  display.clearBuffer();
+  display.setFont(u8g2_font_ncenB08_tr);
+  display.drawStr(20, 11, "SETTINGS");
+  display.drawHLine(0, 13, 128);
+
+  for (int i = 0; i < 3 && (start + i) < total; i++) {
+    int  idx = start + i;
+    int  y   = 27 + i * 16;
+    char buf[24];
+    if (idx == NUM_CFG_DEFS) {
+      strncpy(buf, "< Back", sizeof(buf));
+    } else {
+      if (CFG_DEFS[idx].isInt)
+        snprintf(buf, sizeof(buf), "%-11s %4d", CFG_DEFS[idx].label, (int)*CFG_DEFS[idx].val);
+      else
+        snprintf(buf, sizeof(buf), "%-11s %4.0f", CFG_DEFS[idx].label, *CFG_DEFS[idx].val);
+    }
+    if (idx == settSel) {
+      display.drawBox(0, y - 10, 128, 12);
+      display.setDrawColor(0);
+    }
+    display.drawStr(4, y, buf);
+    if (idx == settSel) display.setDrawColor(1);
+  }
+  display.sendBuffer();
+}
+
+void drawSettingsEdit() {
+  display.clearBuffer();
+  display.setFont(u8g2_font_ncenB08_tr);
+  display.drawStr(4, 11, CFG_DEFS[settSel].label);
+  display.drawHLine(0, 13, 128);
+
+  char valBuf[16];
+  if (CFG_DEFS[settSel].isInt)
+    snprintf(valBuf, sizeof(valBuf), "%d", (int)*CFG_DEFS[settSel].val);
+  else
+    snprintf(valBuf, sizeof(valBuf), "%.0f", *CFG_DEFS[settSel].val);
+
+  display.setFont(u8g2_font_ncenB10_tr);
+  int w = display.getStrWidth(valBuf);
+  display.drawStr((128 - w) / 2, 42, valBuf);
+
+  display.setFont(u8g2_font_5x7_tr);
+  display.drawStr(8, 58, "< rotate >  click OK");
+  display.sendBuffer();
 }
 
 // ── Shared display helpers ────────────────────────────────────────────────
@@ -348,7 +551,6 @@ void drawDisplay() {
     snprintf(buf, sizeof(buf), "Speed  %.0f mph", speedMph);
     display.drawStr(0, 53, buf);
     drawBar(0, 55, 128, 5, speedMph, 140.0f);
-
   } else {
     // Screen 1: text only
     snprintf(buf, sizeof(buf), "Throttle: %.0f%%", metricTPS);
@@ -363,9 +565,8 @@ void drawDisplay() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SIMULATION / DEMO build: scenario playback, startup phases, LED blink
+// Scenario data — all builds (runtime demo mode needs it in production too)
 // ═══════════════════════════════════════════════════════════════════════════
-#if defined(SIMULATION) || defined(DEMO)
 
 // {time_ms, tps%, rpm, speed_kmh}
 // Full cycle (~24s):
@@ -433,8 +634,6 @@ void advanceScenario() {
   metricSpeed = SCENARIO[scenIdx].speed + frac * (SCENARIO[scenIdx+1].speed - SCENARIO[scenIdx].speed);
 }
 
-#endif // SIMULATION || DEMO
-
 // ═══════════════════════════════════════════════════════════════════════════
 // REAL DEVICE build: Bluetooth OBD2, DFPlayer, state machine
 // ═══════════════════════════════════════════════════════════════════════════
@@ -455,13 +654,11 @@ String obdSend(const char* cmd, uint16_t timeout = 300) {
     while (BT.available()) {
       char c = BT.read();
       if (c == '>') {
-        Serial.printf("[OBD] %s → \"%s\"\n", cmd, resp.c_str());
         return resp;
       }
       if (c != '\r' && c != '\n') resp += c;
     }
   }
-  Serial.printf("[OBD] %s → TIMEOUT (%d ms)\n", cmd, timeout);
   return "";
 }
 
@@ -475,14 +672,34 @@ float parsePID(const String& resp, int bytes, float multiplier) {
   return (hi * 256.0f + lo) * multiplier;
 }
 
-void doScanning() {
-  if (scanStartMs == 0) scanStartMs = millis();
+// Non-blocking delay that keeps polling the encoder so the menu stays
+// accessible even during the long blocking BT.discover call.
+static void scanDelay(uint32_t ms) {
+  uint32_t t0 = millis();
+  while (millis() - t0 < ms) {
+    readEncoder();
+    if (menuState != MENU_CLOSED) return;
+    delay(30);
+  }
+}
 
-  // After 30s with no ELM327, enter standalone mode (display works, no OBD2)
+void doScanning() {
+  // Check encoder at entry so a button press during the previous BT.discover
+  // is acted on before we block again.
+  readEncoder();
+  if (menuState != MENU_CLOSED) return;
+
+  if (scanStartMs == 0) {
+    scanStartMs = millis();
+    dfplayer.volume(TURBO_VOLUME_VOICE);
+    dfplayer.playMp3Folder(TRACK_PAIRING);  // "Pairing"
+  }
+
   if (millis() - scanStartMs >= SCAN_TIMEOUT_MS) {
-    Serial.println("[SCAN] No ELM327 found after 30s — entering standalone mode");
-    showMessage("No OBD2 found", "Display only", "Click to retry");
-    delay(1500);
+    dfplayer.volume(TURBO_VOLUME_VOICE);
+    dfplayer.playMp3Folder(TRACK_NO_OBD2);  // "OBD2 not connected"
+    showMessage("No OBD2 found", "Display only", "Click for menu");
+    scanDelay(1500);
     appState = NO_OBD;
     return;
   }
@@ -494,23 +711,25 @@ void doScanning() {
   scanFrame++;
   display.clearBuffer();
   display.setFont(u8g2_font_ncenB08_tr);
-  display.drawStr(0, 22, line1);
-  display.drawStr(0, 37, "Plug ELM327 into");
-  display.drawStr(0, 52, "OBD2 port & wait");
+  display.drawStr(0, 28, line1);
+  display.drawStr(0, 44, "Plug ELM327 into");
+  display.drawStr(0, 59, "OBD2 port & wait");
   display.sendBuffer();
 
-  Serial.println("Scanning for ELM327...");
+  // BT.discover blocks for the full 8 s — poll encoder immediately after
   BTScanResults* results = BT.discover(8000);
+  readEncoder();
+  if (menuState != MENU_CLOSED) return;
+
   if (!results || results->getCount() == 0) {
     showMessage("No device found", "Retrying...");
-    delay(3000);
+    scanDelay(2000);
     return;
   }
   for (int i = 0; i < results->getCount(); i++) {
     BTAdvertisedDevice* dev = results->getDevice(i);
     String name  = dev->getName().c_str();
     String upper = name; upper.toUpperCase();
-    Serial.printf("  [%d] %s\n", i, name.c_str());
     if (upper.indexOf("ELM") >= 0 || upper.indexOf("OBD") >= 0 || upper.indexOf("LINK") >= 0) {
       targetName    = name;
       connectFailed = false;
@@ -519,33 +738,30 @@ void doScanning() {
     }
   }
   showMessage("ELM327 not found", "Retrying...");
-  delay(3000);
+  scanDelay(2000);
 }
 
 void doNoObd() {
   uint32_t now = millis();
-  readEncoder();
   if (now - lastDrawMs >= 200) {
     display.clearBuffer();
     display.setFont(u8g2_font_ncenB10_tr);
-    display.drawStr(0, 22, "No OBD2");
+    display.drawStr(0, 28, "No OBD2");
     display.setFont(u8g2_font_ncenB08_tr);
-    display.drawStr(0, 38, "Display OK");
-    display.drawStr(0, 52, "Click to scan again");
+    display.drawStr(0, 44, "Display OK");
+    display.drawStr(0, 59, "Click for menu");
     display.sendBuffer();
     lastDrawMs = now;
   }
 }
 
 void doConnecting() {
-  Serial.printf("Connecting to: %s\n", targetName.c_str());
   char nameBuf[18];
   strncpy(nameBuf, targetName.c_str(), 17); nameBuf[17] = '\0';
   showMessage("Found:", nameBuf, "Connecting...");
 
   const char* pins[] = {"1234", "0000"};
   for (const char* pin : pins) {
-    Serial.printf("  Trying PIN %s\n", pin);
     BT.setPin(pin, strlen(pin));
     if (BT.connect(targetName)) {
       connectFailed = false;
@@ -555,23 +771,22 @@ void doConnecting() {
     delay(500);
   }
   connectFailed = true;
+  dfplayer.volume(TURBO_VOLUME_VOICE);
+  dfplayer.playMp3Folder(TRACK_NO_OBD2);  // "OBD2 not connected"
   showMessage("Connect failed", "Scanning again...");
   delay(2000);
   appState    = SCANNING;
-  scanStartMs = millis();
+  scanStartMs = 0;  // reset so "Pairing" plays again on re-entry
 }
 
 void doInitElm() {
   char nameBuf[18];
   strncpy(nameBuf, targetName.c_str(), 17); nameBuf[17] = '\0';
   showMessage("Initialising...", nameBuf);
-  Serial.printf("[INIT] Initialising ELM327: %s\n", nameBuf);
 
-  Serial.println("[INIT] ATZ (reset)...");
   obdSend("ATZ", 3000); delay(500);
   const char* cmds[] = {"ATE0", "ATL0", "ATS0", "ATH0", "ATSP0"};
   for (const char* cmd : cmds) {
-    Serial.printf("[INIT] %s\n", cmd);
     obdSend(cmd, 1500); delay(100);
   }
 
@@ -595,7 +810,6 @@ void doInitElm() {
 
 void doRunning() {
   uint32_t now = millis();
-  readEncoder();
   bool encActive = (now - lastEncActiveMs < ENCODER_PRIORITY_MS);
 
   if (metricRPM < ENGINE_IDLE_RPM) {
@@ -611,7 +825,6 @@ void doRunning() {
       drawParked(targetName.c_str());
       lastDrawMs = now;
     }
-
   } else if (metricRPM < ENGINE_DRIVING_RPM) {
     // ── IDLE: engine running, not moving — poll RPM only every 500ms ──────
     // Rotary is fully unblocked; TPS/speed not needed, no Turbo possible.
@@ -624,7 +837,6 @@ void doRunning() {
       drawDisplay();
       lastDrawMs = now;
     }
-
   } else {
     // ── DRIVING: RPM ≥ 1000 — poll TPS + speed + RPM every 100ms ─────────
     if (!encActive && now - lastPollMs >= 100) {
@@ -653,31 +865,17 @@ void setup() {
   display.begin();
   display.setFont(u8g2_font_ncenB10_tr);
   display.clearBuffer();
-  display.drawStr(0, 22, "Turbo Emulator");
+  display.drawStr(0, 28, "Turbo Emulator");
   display.setFont(u8g2_font_ncenB08_tr);
 #ifdef SIMULATION
-  display.drawStr(0, 38, "Wokwi simulation");
+  display.drawStr(0, 44, "Wokwi simulation");
 #else
-  display.drawStr(0, 38, "OBD2 v1.0");
+  display.drawStr(0, 44, "OBD2 v1.0");
 #endif
-  display.drawStr(0, 53, "Starting...");
+  display.drawStr(0, 59, "Starting...");
   display.sendBuffer();
 
-  // ── 2. Serial (after display so screen is already up) ────────────────────
-  Serial.begin(115200);
-  delay(300);
-  Serial.println("\n=== Turbo Sound Emulator ===");
-#ifdef SIMULATION
-  Serial.println("[SETUP] I2C OLED (Wokwi)");
-#else
-  Serial.printf("[SETUP] OLED SPI — CS=%d DC=%d RES=%d SCK=18 MOSI=23\n",
-                PIN_OLED_CS, PIN_OLED_DC, PIN_OLED_RES);
-#endif
-  Serial.println("[SETUP] Boot screen sent to display");
-
-  // ── 3. Encoder ───────────────────────────────────────────────────────────
-  Serial.printf("[SETUP] Encoder — CLK=%d DT=%d SW=%d\n",
-                PIN_ENC_CLK, PIN_ENC_DT, PIN_ENC_SW);
+  // ── 2. Encoder ───────────────────────────────────────────────────────────
   pinMode(PIN_ENC_CLK, INPUT_PULLUP);
   pinMode(PIN_ENC_DT,  INPUT_PULLUP);
   encBtn.attach(PIN_ENC_SW, INPUT_PULLUP);
@@ -686,58 +884,34 @@ void setup() {
 #ifndef SIMULATION
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_CLK), encISR_CLK, FALLING);
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_DT),  encISR_DT,  FALLING);
-  Serial.println("[SETUP] Encoder interrupts attached");
 #endif
 
 #ifdef SIMULATION
   pinMode(PIN_BUZZER, OUTPUT);
   digitalWrite(PIN_BUZZER, LOW);
-  pinMode(PIN_LED, OUTPUT);
-  digitalWrite(PIN_LED, LOW);
   delay(800);
   simPhaseStart = millis();
 #elif defined(DEMO)
-  Serial.printf("[SETUP] LED pin=%d\n", PIN_LED);
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, LOW);
-  Serial.printf("[SETUP] Serial2 for DFPlayer — RX=%d TX=%d at 9600\n", PIN_DFP_RX, PIN_DFP_TX);
   Serial2.begin(9600, SERIAL_8N1, PIN_DFP_RX, PIN_DFP_TX);
-  Serial.println("[SETUP] DFPlayer init...");
-  if (dfplayer.begin(Serial2)) {
-    dfplayer.volume(25);
-    dfplayer.play(1);
-    Serial.println("[SETUP] DFPlayer ready — playing startup sound");
-  } else {
-    Serial.println("[SETUP] DFPlayer FAILED — check wiring, SD card, /mp3/0001.mp3");
-  }
+  delay(500);
+  if (dfplayer.begin(Serial2)) dfplayer.volume(TURBO_VOLUME_VOICE);
   delay(800);
   simPhaseStart = millis();
 #else
-  // ── 4. LED ────────────────────────────────────────────────────────────────
-  Serial.printf("[SETUP] LED pin=%d\n", PIN_LED);
+  // ── 3. LED ────────────────────────────────────────────────────────────────
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, LOW);
 
-  // ── 5. DFPlayer — play startup sound so we know it works ─────────────────
-  Serial.printf("[SETUP] Serial2 for DFPlayer — RX=%d TX=%d at 9600\n",
-                PIN_DFP_RX, PIN_DFP_TX);
+  // ── 4. DFPlayer — play startup sound so we know it works ─────────────────
   Serial2.begin(9600, SERIAL_8N1, PIN_DFP_RX, PIN_DFP_TX);
-  Serial.println("[SETUP] DFPlayer init...");
-  if (dfplayer.begin(Serial2)) {
-    dfplayer.volume(25);
-    dfplayer.play(1);  // startup test — confirms MP3 and speaker work
-    Serial.println("[SETUP] DFPlayer ready — playing startup sound");
-  } else {
-    Serial.println("[SETUP] DFPlayer FAILED — check wiring RX=16 TX=17, SD card, /mp3/0001.mp3");
-  }
-  delay(500);
+  delay(500);  // DFPlayer needs ~500ms after power-on before it responds
+  if (dfplayer.begin(Serial2)) dfplayer.volume(TURBO_VOLUME_VOICE);
 
-  // ── 6. Bluetooth — last, after display and audio are confirmed working ────
-  Serial.println("[SETUP] Bluetooth init (master mode)...");
+  // ── 5. Bluetooth — last, after display and audio are confirmed working ────
   BT.begin("ESP32-OBD", true);
-  Serial.println("[SETUP] Bluetooth ready");
 
-  Serial.println("[SETUP] Setup complete — entering loop");
 #endif
 }
 
@@ -746,6 +920,17 @@ void loop() {
 #if defined(SIMULATION) || defined(DEMO)
   uint32_t now = millis();
   readEncoder();
+
+  // ── Menu overlay ──────────────────────────────────────────────────────────
+  if (menuState == MENU_MAIN)     { drawMainMenu();     return; }
+  if (menuState == MENU_SETTINGS) { drawSettingsMenu(); return; }
+  if (menuState == MENU_EDIT)     { drawSettingsEdit(); return; }
+
+  if (!systemOn) {
+    display.clearBuffer();
+    display.sendBuffer();
+    return;
+  }
 
   switch (simPhase) {
 
@@ -803,52 +988,60 @@ void loop() {
         }
         lastDrawMs = now;
       }
-      if (now - simPhaseStart >= 3000) {
+      if (confirmed && now - simPhaseStart >= 3000) {
         simPhase  = SIM_RUNNING;
         scenStart = millis();
-        Serial.println("[SIM] Starting driving scenario");
+        scenIdx   = 0;
       }
       break;
     }
 
     case SIM_RUNNING: {
-      if (now - lastDrawMs >= 50) {
+      if (demoMode) {
         advanceScenario();
         checkTurbo(now);
-#ifdef SIMULATION
-        digitalWrite(PIN_LED, (now < turboSoundUntilMs && (now / 100) % 2 == 0) ? HIGH : LOW);
-#else
-        digitalWrite(PIN_LED, (now < turboUntilMs      && (now / 100) % 2 == 0) ? HIGH : LOW);
-#endif
-        if (metricRPM < ENGINE_IDLE_RPM) {
-          drawParked("ELM327-SIM");
-        } else {
-          drawDisplay();
-        }
+      }
+      if (now - lastDrawMs >= 50) {
+        drawDisplay();
         lastDrawMs = now;
       }
+#ifdef SIMULATION
+      // LED behaviour: blink fast while turbo sound plays, off otherwise
+      if (now < turboSoundUntilMs) {
+        digitalWrite(PIN_LED, (now / 100) % 2 == 0 ? HIGH : LOW);
+      } else {
+        digitalWrite(PIN_LED, LOW);
+      }
+#endif
       break;
     }
   }
 
 #else
+  // ── Production build ──────────────────────────────────────────────────────
   uint32_t now = millis();
+  readEncoder();
 
-  // Heartbeat — print state every 5 s so we know the loop is alive
-  static uint32_t lastHeartbeatMs = 0;
-  if (now - lastHeartbeatMs >= 5000) {
-    static const char* stateNames[] = {"SCANNING","CONNECTING","INIT_ELM","RUNNING","NO_OBD"};
-    Serial.printf("[LOOP] alive t=%lus state=%s rpm=%.0f tps=%.0f spd=%.0f\n",
-                  now / 1000, stateNames[appState],
-                  metricRPM, metricTPS, metricSpeed);
-    lastHeartbeatMs = now;
+  if (menuState == MENU_MAIN)     { drawMainMenu();     return; }
+  if (menuState == MENU_SETTINGS) { drawSettingsMenu(); return; }
+  if (menuState == MENU_EDIT)     { drawSettingsEdit(); return; }
+
+  if (!systemOn) {
+    display.clearBuffer();
+    display.sendBuffer();
+    return;
   }
 
-  // LED behaviour:
-  //   turbo active                   — fast blink (100 ms) for 2 s
-  //   connected (RUNNING), no turbo  — off
-  //   connect failed                 — solid on
-  //   scanning / connecting          — slow blink (500 ms)
+  if (demoMode) {
+    advanceScenario();
+    checkTurbo(now);
+    if (now - lastDrawMs >= 50) {
+      drawDisplay();
+      lastDrawMs = now;
+    }
+    return;
+  }
+
   if (now < turboUntilMs) {
     digitalWrite(PIN_LED, (now / 100) % 2 == 0 ? HIGH : LOW);
   } else if (appState == RUNNING) {
