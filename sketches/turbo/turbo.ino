@@ -102,37 +102,31 @@ Bounce encBtn;
   DFRobotDFPlayerMini dfplayer;
 #endif
 
-// ── Encoder ISRs (real device only) ──────────────────────────────────────
+// ── Encoder ISR (real device only) ───────────────────────────────────────
 // Bounce2 handles the SW button (encBtn) — one pin, polled in loop().
-// Rotation (CLK/DT) uses ISRs because direction requires comparing the
-// arrival timestamps of TWO pins almost simultaneously. Bounce2 debounces
-// a single pin by polling, which can't do that cross-pin comparison.
 //
-// Direction logic: whichever pin falls FIRST determines direction; the
-// second pin's fall is ignored (the other ISR updated its timestamp recently).
-//   CW:  DT falls first  → encISR_DT  fires, encDelta++
-//        CLK falls after → encISR_CLK  sees DtUs was recent, skips
-//   CCW: CLK falls first → encISR_CLK fires, encDelta--
-//        DT falls after  → encISR_DT  sees ClkUs was recent, skips
-// 3000 µs cross-pin window filters the trailing edge of each detent step.
-// 3000 µs self-debounce suppresses contact bounce (KY-040 bounce ≤ 2 ms).
+// Rotation uses a single ISR on CLK FALLING only. When CLK falls, DT is
+// read immediately — the same algorithm used in the arduino-laser-target
+// project (which has a smooth, reliable encoder). This avoids the fragile
+// "which pin fired first" timestamp race of the two-ISR approach.
+//
+//   CLK falls while DT is LOW  → turning CW  → encDelta++
+//   CLK falls while DT is HIGH → turning CCW → encDelta--
+//
+// 3000 µs self-debounce on CLK prevents the same edge being counted twice
+// during contact bounce. DT is stable by the time CLK bounces again.
 #ifndef SIMULATION
   volatile int           encDelta = 0;
   volatile unsigned long encClkUs = 0;
-  volatile unsigned long encDtUs  = 0;
 
   void IRAM_ATTR encISR_CLK() {
     unsigned long now = micros();
-    if (now - encClkUs < 3000) return;      // self-debounce (KY-040 bounce up to ~2ms)
+    if (now - encClkUs < 3000) return;             // self-debounce
     encClkUs = now;
-    if (now - encDtUs > 3000) encDelta--;   // CLK led → CCW
-  }
-
-  void IRAM_ATTR encISR_DT() {
-    unsigned long now = micros();
-    if (now - encDtUs < 3000) return;       // self-debounce
-    encDtUs = now;
-    if (now - encClkUs > 3000) encDelta++;  // DT led → CW
+    if (digitalRead(PIN_ENC_DT) == LOW)
+      encDelta++;   // CLK fell, DT already LOW → CW
+    else
+      encDelta--;   // CLK fell, DT still HIGH → CCW
   }
 #endif
 
@@ -184,7 +178,7 @@ struct SettingDef {
 };
 // Each entry: display label, pointer to cfg var, step size, min, max, integer display.
 // Changes take effect immediately when edited. Saved to NVS when "< Back" is pressed.
-// Use "Factory Rst" in the settings menu to restore all values to firmware defaults.
+// Use "Factory Reset" in the settings menu to restore all values to firmware defaults.
 static SettingDef CFG_DEFS[] = {
   // Turbo trigger conditions (all must be true simultaneously):
   {"TPS High %",  &cfgThrottleHigh,   5.0f,  10.0f, 100.0f, false}, // TPS must have been above this (hard push)
@@ -461,8 +455,12 @@ void readEncoder() {
 }
 
 void applyDelta(int delta) {
-  // Rate-limit menu navigation: one step per 50 ms.
-  // ISR debounce (3ms) handles bounce; this just guards against ISR accumulation.
+  // Rate-limit menu navigation on real hardware only.
+  // The ISR can accumulate a large encDelta before applyDelta() runs;
+  // capping at one step per 50 ms prevents runaway scrolling.
+  // In simulation there is no ISR accumulation, so no rate limit is needed
+  // (and millis() runs at simulation speed, making any fixed delay feel laggy).
+#ifndef SIMULATION
   if (menuState != MENU_CLOSED) {
     static uint32_t lastMenuStepMs = 0;
     uint32_t now = millis();
@@ -470,6 +468,7 @@ void applyDelta(int delta) {
     lastMenuStepMs = now;
     delta = (delta > 0) ? 1 : -1;
   }
+#endif
   if (menuState == MENU_MAIN) {
     mainSel = (mainSel + delta % NUM_MAIN_ITEMS + NUM_MAIN_ITEMS) % NUM_MAIN_ITEMS;
   } else if (menuState == MENU_SETTINGS) {
@@ -527,7 +526,7 @@ void drawSettingsMenu() {
     if (idx == NUM_CFG_DEFS) {
       strncpy(buf, "< Back", sizeof(buf));
     } else if (idx == NUM_CFG_DEFS + 1) {
-      strncpy(buf, "Factory Rst", sizeof(buf));
+      strncpy(buf, "Factory Reset", sizeof(buf));
     } else {
       if (CFG_DEFS[idx].isInt)
         snprintf(buf, sizeof(buf), "%-11s %4d", CFG_DEFS[idx].label, (int)*CFG_DEFS[idx].val);
@@ -1031,7 +1030,7 @@ void setup() {
   lastClk = digitalRead(PIN_ENC_CLK);
 #ifndef SIMULATION
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_CLK), encISR_CLK, FALLING);
-  attachInterrupt(digitalPinToInterrupt(PIN_ENC_DT),  encISR_DT,  FALLING);
+  // PIN_ENC_DT needs no interrupt — it is read inside encISR_CLK directly
 #endif
 
 #ifdef SIMULATION
