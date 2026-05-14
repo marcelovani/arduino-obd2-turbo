@@ -73,6 +73,7 @@
 #define TURBO_VOLUME_GEAR1   30    // 100% — DFPlayer max is 30
 #define TURBO_VOLUME_GEAR2   27    // 90%
 #define TURBO_VOLUME_VOICE   13    // 50% — spoken announcements
+#define VOICE_PLAY_MS      3000   // ms to wait for voice clip to finish before muting amp
 
 // ── Engine state thresholds ───────────────────────────────────────────────
 #define ENGINE_IDLE_RPM    200.0f   // below = engine off → parked screen, poll battery/coolant/RPM
@@ -261,6 +262,19 @@ void checkTurbo(uint32_t now) {
   prevTPS = metricTPS;
 }
 
+// ── DFPlayer voice helper ─────────────────────────────────────────────────
+// Plays a spoken announcement then silences the amp to kill idle hiss.
+// Never use for spray sounds — checkTurbo() sets its own volume each time.
+#ifndef SIMULATION
+static void dfplayerVoice(int track) {
+  dfplayer.volume(TURBO_VOLUME_VOICE);
+  dfplayer.playMp3Folder(track);
+  delay(VOICE_PLAY_MS);
+  dfplayer.stop();
+  dfplayer.volume(0);
+}
+#endif
+
 // ── Menu execution helpers ─────────────────────────────────────────────────
 void execMainMenu() {
   switch (mainSel) {
@@ -269,8 +283,7 @@ void execMainMenu() {
       if (!systemOn) {
         menuState = MENU_CLOSED;
 #ifndef SIMULATION
-        dfplayer.volume(TURBO_VOLUME_VOICE);
-        dfplayer.playMp3Folder(TRACK_GOODBYE);
+        dfplayerVoice(TRACK_GOODBYE);  // plays, waits, then mutes amp
 #endif
         display.clearBuffer();
         display.sendBuffer();
@@ -708,8 +721,7 @@ void doScanning() {
     scanStartMs = millis();
     scanFrame   = 0;
     bleFound    = false;
-    dfplayer.volume(TURBO_VOLUME_VOICE);
-    dfplayer.playMp3Folder(TRACK_PAIRING);
+    dfplayerVoice(TRACK_PAIRING);  // plays, waits, then mutes amp
   }
 
   if (bleFound) {
@@ -720,10 +732,8 @@ void doScanning() {
   }
 
   if (millis() - scanStartMs >= SCAN_TIMEOUT_MS) {
-    dfplayer.volume(TURBO_VOLUME_VOICE);
-    dfplayer.playMp3Folder(TRACK_NO_OBD2);
     showMessage("No OBD2 found", "Display only", "Click for menu");
-    delay(1500);
+    dfplayerVoice(TRACK_NO_OBD2);  // plays, waits, then mutes amp
     appState = NO_OBD;
     return;
   }
@@ -768,10 +778,8 @@ void doConnecting() {
 
   if (!bleClient->connect(bleDevice)) {
     connectFailed = true;
-    dfplayer.volume(TURBO_VOLUME_VOICE);
-    dfplayer.playMp3Folder(TRACK_NO_OBD2);
     showMessage("Connect failed", "Scanning again...");
-    delay(2000);
+    dfplayerVoice(TRACK_NO_OBD2);  // plays, waits, then mutes amp
     appState    = SCANNING;
     scanStartMs = 0;
     bleFound    = false;
@@ -783,7 +791,7 @@ void doConnecting() {
     bleClient->disconnect();
     connectFailed = true;
     showMessage("Service missing", "Scanning again...");
-    delay(2000);
+    dfplayerVoice(TRACK_NO_OBD2);  // plays, waits, then mutes amp
     appState    = SCANNING;
     scanStartMs = 0;
     bleFound    = false;
@@ -797,7 +805,7 @@ void doConnecting() {
     bleClient->disconnect();
     connectFailed = true;
     showMessage("Chars missing", "Scanning again...");
-    delay(2000);
+    dfplayerVoice(TRACK_NO_OBD2);  // plays, waits, then mutes amp
     appState    = SCANNING;
     scanStartMs = 0;
     bleFound    = false;
@@ -939,8 +947,9 @@ void setup() {
   digitalWrite(PIN_LED, LOW);
   Serial2.begin(9600, SERIAL_8N1, PIN_DFP_RX, PIN_DFP_TX);
   delay(500);
-  if (dfplayer.begin(Serial2)) dfplayer.volume(TURBO_VOLUME_VOICE);
-  delay(800);
+  if (dfplayer.begin(Serial2)) {
+    dfplayerVoice(TRACK_PAIRING);  // plays during startup screen, then mutes amp
+  }
   simPhaseStart = millis();
 #else
   // ── 3. LED ────────────────────────────────────────────────────────────────
