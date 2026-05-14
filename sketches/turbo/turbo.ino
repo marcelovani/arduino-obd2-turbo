@@ -758,17 +758,27 @@ void doNoObd() {
 void doConnecting() {
   char nameBuf[18];
   strncpy(nameBuf, targetName.c_str(), 17); nameBuf[17] = '\0';
-  showMessage("Found:", nameBuf, "Connecting...");
 
-  const char* pins[] = {"1234", "0000"};
-  for (const char* pin : pins) {
-    BT.setPin(pin, strlen(pin));
+  // Try no-PIN first (many ELM327 clones accept without pairing),
+  // then the most common PINs for cheap OBD dongles.
+  struct { const char* label; const char* pin; } attempts[] = {
+    { "no PIN",  nullptr },
+    { "PIN 1234", "1234" },
+    { "PIN 0000", "0000" },
+    { "PIN 6789", "6789" },
+    { "PIN 1111", "1111" },
+  };
+  for (auto& a : attempts) {
+    char line3[20];
+    snprintf(line3, sizeof(line3), "Trying %s...", a.label);
+    showMessage("Found:", nameBuf, line3);
+    if (a.pin) BT.setPin(a.pin, strlen(a.pin));
     if (BT.connect(targetName)) {
       connectFailed = false;
       appState = INIT_ELM;
       return;
     }
-    delay(500);
+    delay(300);
   }
   connectFailed = true;
   dfplayer.volume(TURBO_VOLUME_VOICE);
