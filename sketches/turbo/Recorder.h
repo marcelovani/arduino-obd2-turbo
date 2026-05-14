@@ -70,6 +70,9 @@ void tickRecording(uint32_t now) {
   if (!recActive) return;
   if (now - lastRecMs < 100) return;
   lastRecMs = now;
+  // Only write rows when in driving mode — TPS and speed are not polled below
+  // ENGINE_DRIVING_RPM, so recording idle rows produces stale zeros.
+  if (metricRPM < ENGINE_DRIVING_RPM) return;
   char buf[48];
   snprintf(buf, sizeof(buf), "%lu,%.1f,%.1f,%.1f",
     (unsigned long)now, metricTPS, metricRPM, metricSpeed);

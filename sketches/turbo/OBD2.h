@@ -73,7 +73,8 @@ static String obdSend(const char* cmd, uint16_t timeout = 300) {
   uint32_t t0 = millis();
   while (millis() - t0 < timeout) {
     if (bleRxBuf.indexOf('>') >= 0) return bleRxBuf;
-    if (menuState != MENU_CLOSED) return "";  // yield CPU to menu immediately
+    // Only collect data when the menu is closed or we are on the recording screen.
+    if (menuState != MENU_CLOSED && menuState != MENU_RECORDING) return "";
     delay(10);
   }
   return bleRxBuf;
