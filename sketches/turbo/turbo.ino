@@ -28,6 +28,7 @@
   #include <Wire.h>
 #else
   #include <SPI.h>
+  #include <Preferences.h>
   #ifndef DEMO
     #include <BLEDevice.h>
     #include <BLEClient.h>
@@ -64,9 +65,9 @@
 #define TRACK_SPRAY_GEAR2 11   // faster spray         — 2nd→3rd gear change
 
 // ── Turbo thresholds (compile-time defaults — overridden at runtime via cfg*) ──
-#define TURBO_THROTTLE_HIGH  60.0f
-#define TURBO_THROTTLE_LOW   10.0f
-#define TURBO_RPM_MIN        3000.0f
+#define TURBO_THROTTLE_HIGH  60.0f   // % — TPS must have been above this (hard acceleration)
+#define TURBO_THROTTLE_LOW   10.0f   // % — TPS must now be below this (lifted off)
+#define TURBO_RPM_MIN        3000.0f // RPM — must be spinning hard when you lift off
 #define TURBO_MIN_GEAR       1
 #define TURBO_MAX_GEAR       2
 #define TURBO_COOLDOWN_MS    2000
@@ -74,6 +75,12 @@
 #define TURBO_VOLUME_GEAR2   27    // 90%
 #define TURBO_VOLUME_VOICE   13    // 50% — spoken announcements
 #define VOICE_PLAY_MS      3000   // ms to wait for voice clip to finish before muting amp
+// OBD2 PID 010D always returns speed in km/h (SAE J1979 standard), even in the UK.
+// The display converts to mph. All gear-ratio thresholds below use RPM ÷ km/h.
+// CLA180 typical: shift 1→2 at ~30 mph (48 km/h), ~4000 RPM → ratio = 4000/48 ≈ 83.
+// Tune via Settings menu after monitoring Serial output in each gear.
+#define TURBO_RATIO_GEAR12   85.0f   // RPM/km/h > this → gear 1
+#define TURBO_RATIO_GEAR23   45.0f   // RPM/km/h > this (and ≤ GEAR12) → gear 2
 
 // ── Engine state thresholds ───────────────────────────────────────────────
 #define ENGINE_IDLE_RPM    200.0f   // below = engine off → parked screen, poll battery/coolant/RPM
@@ -96,15 +103,19 @@ Bounce encBtn;
 #endif
 
 // ── Encoder ISRs (real device only) ──────────────────────────────────────
-// Whichever pin falls FIRST determines direction; the second pin's fall is
-// ignored because the other ISR already updated its timestamp recently.
-// This works for all KY-040 variants regardless of which pin leads for CW.
+// Bounce2 handles the SW button (encBtn) — one pin, polled in loop().
+// Rotation (CLK/DT) uses ISRs because direction requires comparing the
+// arrival timestamps of TWO pins almost simultaneously. Bounce2 debounces
+// a single pin by polling, which can't do that cross-pin comparison.
+//
+// Direction logic: whichever pin falls FIRST determines direction; the
+// second pin's fall is ignored (the other ISR updated its timestamp recently).
 //   CW:  DT falls first  → encISR_DT  fires, encDelta++
-//         CLK falls after → encISR_CLK  sees DtUs was recent, skips
+//        CLK falls after → encISR_CLK  sees DtUs was recent, skips
 //   CCW: CLK falls first → encISR_CLK fires, encDelta--
-//         DT falls after  → encISR_DT  sees ClkUs was recent, skips
-// 500 µs cross-pin window filters second edges; 500 µs self-debounce
-// filters contact bounce (KY-040 bounce well under 500 µs).
+//        DT falls after  → encISR_DT  sees ClkUs was recent, skips
+// 3000 µs cross-pin window filters the trailing edge of each detent step.
+// 3000 µs self-debounce suppresses contact bounce (KY-040 bounce ≤ 2 ms).
 #ifndef SIMULATION
   volatile int           encDelta = 0;
   volatile unsigned long encClkUs = 0;
@@ -112,16 +123,16 @@ Bounce encBtn;
 
   void IRAM_ATTR encISR_CLK() {
     unsigned long now = micros();
-    if (now - encClkUs < 500) return;      // self-debounce
+    if (now - encClkUs < 3000) return;      // self-debounce (KY-040 bounce up to ~2ms)
     encClkUs = now;
-    if (now - encDtUs > 500) encDelta--;   // CLK led → CCW
+    if (now - encDtUs > 3000) encDelta--;   // CLK led → CCW
   }
 
   void IRAM_ATTR encISR_DT() {
     unsigned long now = micros();
-    if (now - encDtUs < 500) return;       // self-debounce
+    if (now - encDtUs < 3000) return;       // self-debounce
     encDtUs = now;
-    if (now - encClkUs > 500) encDelta++;  // DT led → CW
+    if (now - encClkUs > 3000) encDelta++;  // DT led → CW
   }
 #endif
 
@@ -159,6 +170,9 @@ float cfgMaxGear      = (float)TURBO_MAX_GEAR;
 float cfgCooldownMs   = (float)TURBO_COOLDOWN_MS;
 float cfgVolGear1     = (float)TURBO_VOLUME_GEAR1;
 float cfgVolGear2     = (float)TURBO_VOLUME_GEAR2;
+float cfgRatio12      = TURBO_RATIO_GEAR12;
+float cfgRatio23      = TURBO_RATIO_GEAR23;
+float cfgVolVoice     = (float)TURBO_VOLUME_VOICE;
 
 struct SettingDef {
   const char* label;
@@ -168,15 +182,24 @@ struct SettingDef {
   float       vmax;
   bool        isInt;
 };
+// Each entry: display label, pointer to cfg var, step size, min, max, integer display.
+// Changes take effect immediately when edited. Saved to NVS when "< Back" is pressed.
+// Use "Factory Rst" in the settings menu to restore all values to firmware defaults.
 static SettingDef CFG_DEFS[] = {
-  {"TPS High %",  &cfgThrottleHigh,   5.0f,  10.0f, 100.0f, false},
-  {"TPS Low  %",  &cfgThrottleLow,    1.0f,   0.0f,  50.0f, false},
-  {"RPM Min",     &cfgRpmMin,       100.0f, 500.0f, 6000.0f, true },
-  {"Min Gear",    &cfgMinGear,        1.0f,   1.0f,    6.0f, true },
-  {"Max Gear",    &cfgMaxGear,        1.0f,   1.0f,    6.0f, true },
-  {"Cooldown ms", &cfgCooldownMs,   100.0f, 500.0f,10000.0f, true },
-  {"Vol Gear 1",  &cfgVolGear1,       1.0f,   0.0f,   30.0f, true },
-  {"Vol Gear 2",  &cfgVolGear2,       1.0f,   0.0f,   30.0f, true },
+  // Turbo trigger conditions (all must be true simultaneously):
+  {"TPS High %",  &cfgThrottleHigh,   5.0f,  10.0f, 100.0f, false}, // TPS must have been above this (hard push)
+  {"TPS Low  %",  &cfgThrottleLow,    1.0f,   0.0f,  50.0f, false}, // TPS must now be below this (lifted off)
+  {"RPM Min",     &cfgRpmMin,       100.0f, 500.0f, 6000.0f, true }, // engine must be spinning above this RPM
+  {"Min Gear",    &cfgMinGear,        1.0f,   1.0f,    6.0f, true }, // only trigger in this gear or higher
+  {"Max Gear",    &cfgMaxGear,        1.0f,   1.0f,    6.0f, true }, // only trigger in this gear or lower
+  {"Cooldown ms", &cfgCooldownMs,   100.0f, 500.0f,10000.0f, true }, // min time between two triggers (ms)
+  // Audio volumes (DFPlayer scale 0–30):
+  {"Vol Gear 1",  &cfgVolGear1,       1.0f,   0.0f,   30.0f, true }, // spray volume for 1st gear change
+  {"Vol Gear 2",  &cfgVolGear2,       1.0f,   0.0f,   30.0f, true }, // spray volume for 2nd gear change
+  {"Vol Voice",   &cfgVolVoice,       1.0f,   0.0f,   30.0f, true }, // voice announcements volume
+  // Gear estimation (ratio = RPM ÷ speed_km/h — OBD2 speed is always km/h):
+  {"Ratio G1/G2", &cfgRatio12,        5.0f,  30.0f,  200.0f, true }, // ratio above this = 1st gear
+  {"Ratio G2/G3", &cfgRatio23,        5.0f,  20.0f,  150.0f, true }, // ratio above this (and ≤ G1/G2) = 2nd gear
 };
 #define NUM_CFG_DEFS  (int)(sizeof(CFG_DEFS) / sizeof(CFG_DEFS[0]))
 
@@ -223,12 +246,12 @@ uint32_t scenStart = 0;
 int estimateGear(float rpm, float speed) {
   if (speed < 2.0f || rpm < 100.0f) return 0;
   float ratio = rpm / speed;
-  if      (ratio > 50.0f) return 1;
-  else if (ratio > 33.0f) return 2;
-  else if (ratio > 19.0f) return 3;
-  else if (ratio > 12.0f) return 4;
-  else if (ratio >  8.0f) return 5;
-  else                    return 6;
+  if      (ratio > cfgRatio12) return 1;
+  else if (ratio > cfgRatio23) return 2;
+  else if (ratio > 19.0f)      return 3;
+  else if (ratio > 12.0f)      return 4;
+  else if (ratio >  8.0f)      return 5;
+  else                         return 6;
 }
 
 // ── Turbo trigger ─────────────────────────────────────────────────────────
@@ -267,7 +290,7 @@ void checkTurbo(uint32_t now) {
 // Never use for spray sounds — checkTurbo() sets its own volume each time.
 #ifndef SIMULATION
 static void dfplayerVoice(int track) {
-  dfplayer.volume(TURBO_VOLUME_VOICE);
+  dfplayer.volume((int)cfgVolVoice);
   dfplayer.playMp3Folder(track);
   delay(VOICE_PLAY_MS);
   dfplayer.stop();
@@ -301,7 +324,7 @@ void execMainMenu() {
         simPhaseStart = millis();
 #endif
 #ifndef SIMULATION
-        dfplayer.volume(TURBO_VOLUME_VOICE);
+        dfplayer.volume((int)cfgVolVoice);
         dfplayer.playMp3Folder(TRACK_DEMO_MODE);
 #endif
       }
@@ -316,9 +339,79 @@ void execMainMenu() {
   }
 }
 
+#ifndef SIMULATION
+static void loadSettings() {
+  Preferences prefs;
+  prefs.begin("turbo", true);
+  cfgThrottleHigh = prefs.getFloat("tpsHigh",  cfgThrottleHigh);
+  cfgThrottleLow  = prefs.getFloat("tpsLow",   cfgThrottleLow);
+  cfgRpmMin       = prefs.getFloat("rpmMin",   cfgRpmMin);
+  cfgMinGear      = prefs.getFloat("minGear",  cfgMinGear);
+  cfgMaxGear      = prefs.getFloat("maxGear",  cfgMaxGear);
+  cfgCooldownMs   = prefs.getFloat("cooldown", cfgCooldownMs);
+  cfgVolGear1     = prefs.getFloat("volG1",    cfgVolGear1);
+  cfgVolGear2     = prefs.getFloat("volG2",    cfgVolGear2);
+  cfgRatio12      = prefs.getFloat("ratio12",  cfgRatio12);
+  cfgRatio23      = prefs.getFloat("ratio23",  cfgRatio23);
+  cfgVolVoice     = prefs.getFloat("volVoice", cfgVolVoice);
+  prefs.end();
+}
+
+static void saveSettings() {
+  Preferences prefs;
+  prefs.begin("turbo", false);
+  prefs.putFloat("tpsHigh",  cfgThrottleHigh);
+  prefs.putFloat("tpsLow",   cfgThrottleLow);
+  prefs.putFloat("rpmMin",   cfgRpmMin);
+  prefs.putFloat("minGear",  cfgMinGear);
+  prefs.putFloat("maxGear",  cfgMaxGear);
+  prefs.putFloat("cooldown", cfgCooldownMs);
+  prefs.putFloat("volG1",    cfgVolGear1);
+  prefs.putFloat("volG2",    cfgVolGear2);
+  prefs.putFloat("ratio12",  cfgRatio12);
+  prefs.putFloat("ratio23",  cfgRatio23);
+  prefs.putFloat("volVoice", cfgVolVoice);
+  prefs.end();
+}
+
+static void resetSettings() {
+  Preferences prefs;
+  prefs.begin("turbo", false);
+  prefs.clear();   // wipe the entire "turbo" NVS namespace
+  prefs.end();
+  // Reinitialise to compile-time defaults
+  cfgThrottleHigh = TURBO_THROTTLE_HIGH;
+  cfgThrottleLow  = TURBO_THROTTLE_LOW;
+  cfgRpmMin       = TURBO_RPM_MIN;
+  cfgMinGear      = (float)TURBO_MIN_GEAR;
+  cfgMaxGear      = (float)TURBO_MAX_GEAR;
+  cfgCooldownMs   = (float)TURBO_COOLDOWN_MS;
+  cfgVolGear1     = (float)TURBO_VOLUME_GEAR1;
+  cfgVolGear2     = (float)TURBO_VOLUME_GEAR2;
+  cfgRatio12      = TURBO_RATIO_GEAR12;
+  cfgRatio23      = TURBO_RATIO_GEAR23;
+  cfgVolVoice     = (float)TURBO_VOLUME_VOICE;
+}
+#endif
+
 void execSettingsMenu() {
   if (settSel == NUM_CFG_DEFS) {
+#ifndef SIMULATION
+    saveSettings();
+#endif
     menuState = MENU_MAIN;  // Back
+  } else if (settSel == NUM_CFG_DEFS + 1) {
+#ifndef SIMULATION
+    resetSettings();        // Factory Reset — wipe NVS and restore defaults
+#endif
+    display.clearBuffer();
+    display.setFont(u8g2_font_ncenB10_tr);
+    display.drawStr(0, 28, "Factory reset");
+    display.setFont(u8g2_font_ncenB08_tr);
+    display.drawStr(0, 44, "Done!");
+    display.sendBuffer();
+    delay(1200);
+    menuState = MENU_MAIN;
   } else {
     menuState = MENU_EDIT;
   }
@@ -368,19 +461,19 @@ void readEncoder() {
 }
 
 void applyDelta(int delta) {
-  // Rate-limit menu navigation: one step per 150 ms prevents encoder bounce
-  // from skipping multiple items per physical detent.
+  // Rate-limit menu navigation: one step per 50 ms.
+  // ISR debounce (3ms) handles bounce; this just guards against ISR accumulation.
   if (menuState != MENU_CLOSED) {
     static uint32_t lastMenuStepMs = 0;
     uint32_t now = millis();
-    if (now - lastMenuStepMs < 150) return;
+    if (now - lastMenuStepMs < 50) return;
     lastMenuStepMs = now;
     delta = (delta > 0) ? 1 : -1;
   }
   if (menuState == MENU_MAIN) {
     mainSel = (mainSel + delta % NUM_MAIN_ITEMS + NUM_MAIN_ITEMS) % NUM_MAIN_ITEMS;
   } else if (menuState == MENU_SETTINGS) {
-    int total = NUM_CFG_DEFS + 1;  // +1 for Back
+    int total = NUM_CFG_DEFS + 2;  // +1 for Back, +1 for Factory Reset
     settSel = (settSel + delta % total + total) % total;
   } else if (menuState == MENU_EDIT) {
     float* v = CFG_DEFS[settSel].val;
@@ -419,7 +512,7 @@ void drawMainMenu() {
 }
 
 void drawSettingsMenu() {
-  int total  = NUM_CFG_DEFS + 1;  // +1 for Back
+  int total  = NUM_CFG_DEFS + 2;  // +1 for Back, +1 for Factory Reset
   int start  = constrain(settSel - 1, 0, total - 3);
 
   display.clearBuffer();
@@ -433,6 +526,8 @@ void drawSettingsMenu() {
     char buf[24];
     if (idx == NUM_CFG_DEFS) {
       strncpy(buf, "< Back", sizeof(buf));
+    } else if (idx == NUM_CFG_DEFS + 1) {
+      strncpy(buf, "Factory Rst", sizeof(buf));
     } else {
       if (CFG_DEFS[idx].isInt)
         snprintf(buf, sizeof(buf), "%-11s %4d", CFG_DEFS[idx].label, (int)*CFG_DEFS[idx].val);
@@ -592,7 +687,8 @@ void drawDisplay() {
 // TPS hold for 200ms after each lift-off guarantees a 100ms checkpoint lands
 // while prevTPS is high and currentTPS is low.
 //
-// Gear thresholds (ratio = RPM / km/h):  >50=1st  >33=2nd  >19=3rd  >12=4th
+// Gear thresholds (ratio = RPM / km/h): >85=1st  >45=2nd  >19=3rd  >12=4th
+// CLA180: shift 1→2 at ~30 mph (48 km/h), shift 2→3 at ~40 mph (64 km/h).
 struct DataPoint { uint32_t t; float tps; float rpm; float speed; };
 static const DataPoint SCENARIO[] = {
   // ── Parked ────────────────────────────────────────────────────────────────
@@ -601,23 +697,23 @@ static const DataPoint SCENARIO[] = {
   {  3100,  0,  750,    0 },  // engine cranks → idle screen (RPM 200–999)
   {  8000,  0,  850,    0 },  // 5s idle — rotary fully responsive
 
-  // ── 1st gear: quick throttle, 0→64 km/h (40 mph) in ~1.5s ───────────────
-  {  8200, 85, 1200,    2 },  // snap to throttle
-  {  9500, 90, 3400,   60 },  // near redline  (ratio=57 → gear 1)
-  {  9501,  4, 3300,   60 },  // *** Turbo #1 *** instant lift-off
-  {  9700,  4, 3200,   62 },  // hold TPS low 200ms (ensures trigger fires)
+  // ── 1st gear: quick throttle, 0→48 km/h (30 mph) in ~1.5s ───────────────
+  {  8200, 85, 1500,    2 },  // snap to throttle
+  {  9500, 90, 4000,   46 },  // near redline  (ratio=87 → gear 1)
+  {  9501,  4, 3900,   46 },  // *** Turbo #1 *** instant lift-off
+  {  9700,  4, 3800,   47 },  // hold TPS low 200ms (ensures trigger fires)
 
-  // ── 2nd gear: quick throttle, 64→97 km/h (40→60 mph) in ~2.8s ───────────
-  {  9900, 85, 2600,   65 },  // back on throttle  (ratio=40 → gear 2)
-  { 12500, 88, 3300,   90 },  // near redline  (ratio=37 → gear 2)
-  { 12501,  4, 3200,   90 },  // *** Turbo #2 *** instant lift-off
-  { 12700,  4, 3100,   92 },  // hold TPS low 200ms
+  // ── 2nd gear: quick throttle, 48→64 km/h (30→40 mph) in ~2.8s ───────────
+  {  9900, 85, 2600,   54 },  // back on throttle  (ratio=48 → gear 2)
+  { 12500, 88, 3500,   70 },  // near redline  (ratio=50 → gear 2)
+  { 12501,  4, 3400,   70 },  // *** Turbo #2 *** instant lift-off
+  { 12700,  4, 3300,   71 },  // hold TPS low 200ms
 
-  // ── 3rd gear: moderate throttle, 97→145 km/h (60→90 mph) in 3s ──────────
-  { 12900, 50, 2200,   96 },  // back on throttle  (ratio=23 → gear 3)
+  // ── 3rd gear: moderate throttle, 64→112 km/h (40→70 mph) in 3s ──────────
+  { 12900, 50, 2200,   74 },  // back on throttle  (ratio=30 → gear 3)
   { 15900, 45, 2800,  140 },  // cruising  (ratio=20 → gear 3)
 
-  // ── 4th gear: light throttle, 145→161 km/h (90→100 mph) in ~2s ──────────
+  // ── 4th gear: light throttle, 112→129 km/h (70→80 mph) in ~2s ───────────
   { 16000, 28, 2200,  145 },  // shift to 4th  (ratio=15 → gear 4)
   { 17900, 25, 2400,  161 },  // 100 mph  (ratio=15 → gear 4)
 
@@ -698,6 +794,7 @@ String obdSend(const char* cmd, uint16_t timeout = 300) {
   uint32_t t0 = millis();
   while (millis() - t0 < timeout) {
     if (bleRxBuf.indexOf('>') >= 0) return bleRxBuf;
+    if (menuState != MENU_CLOSED) return "";  // yield CPU to menu immediately
     delay(10);
   }
   return bleRxBuf;
@@ -943,6 +1040,7 @@ void setup() {
   delay(800);
   simPhaseStart = millis();
 #elif defined(DEMO)
+  loadSettings();
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, LOW);
   Serial2.begin(9600, SERIAL_8N1, PIN_DFP_RX, PIN_DFP_TX);
@@ -952,6 +1050,8 @@ void setup() {
   }
   simPhaseStart = millis();
 #else
+  loadSettings();
+
   // ── 3. LED ────────────────────────────────────────────────────────────────
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, LOW);
@@ -959,7 +1059,7 @@ void setup() {
   // ── 4. DFPlayer — play startup sound so we know it works ─────────────────
   Serial2.begin(9600, SERIAL_8N1, PIN_DFP_RX, PIN_DFP_TX);
   delay(500);  // DFPlayer needs ~500ms after power-on before it responds
-  if (dfplayer.begin(Serial2)) dfplayer.volume(TURBO_VOLUME_VOICE);
+  if (dfplayer.begin(Serial2)) dfplayer.volume((int)cfgVolVoice);
 
   // ── 5. BLE — last, after display and audio are confirmed working ──────────
   BLEDevice::init("");

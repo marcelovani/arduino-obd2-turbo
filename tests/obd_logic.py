@@ -15,12 +15,15 @@ When you change a threshold or algorithm in the sketch, update it here too.
 # ── Turbo trigger thresholds ────────────────────────────────────────────────
 # Keep in sync with #define TURBO_* in the sketches
 
-TURBO_THROTTLE_HIGH = 60.0   # TPS must have been above this (hard acceleration)
-TURBO_THROTTLE_LOW  = 10.0   # TPS must now be below this (lifted off)
-TURBO_RPM_MIN       = 3000.0 # must be near peak RPM (about to shift)
-TURBO_MIN_GEAR      = 1      # trigger from 1st gear upward
-TURBO_MAX_GEAR      = 2      # only trigger in 2nd gear or lower
-TURBO_COOLDOWN_MS   = 2000   # min ms between Turbo sounds
+TURBO_THROTTLE_HIGH  = 60.0   # TPS must have been above this (hard acceleration)
+TURBO_THROTTLE_LOW   = 10.0   # TPS must now be below this (lifted off)
+TURBO_RPM_MIN        = 3000.0 # RPM must be above this (near peak / about to shift)
+TURBO_MIN_GEAR       = 1      # trigger from 1st gear upward
+TURBO_MAX_GEAR       = 2      # only trigger in 2nd gear or lower
+TURBO_COOLDOWN_MS    = 2000   # min ms between Turbo sounds
+# RPM/speed (km/h) ratio boundaries — CLA180: shift 1→2 at ~30 mph, ~4000 RPM → ratio ≈ 83
+TURBO_RATIO_GEAR12   = 85.0   # ratio > this → gear 1
+TURBO_RATIO_GEAR23   = 45.0   # ratio > this (and ≤ GEAR12) → gear 2
 
 
 def parse_pid(resp: str, byte_count: int, multiplier: float) -> float:
@@ -53,30 +56,28 @@ def estimate_gear(rpm: float, speed_kmh: float) -> int:
     """
     Mirror of C++ estimateGear(rpm, speedKmh).
 
-    Estimates current gear from the RPM/speed ratio.
+    OBD2 PID 010D always returns speed in km/h (SAE J1979 standard), even for
+    UK cars. The display converts to mph but all ratio thresholds use km/h.
+
+    Estimates gear from ratio = RPM / speed_kmh.
     Returns 0 if gear cannot be determined (stopped or engine off).
 
-    Thresholds are approximate for a typical small gasoline car.
-    Calibrate for your specific car by driving in each gear at steady
-    speed and noting the RPM/speed ratio (RPM ÷ km/h).
-
-    Mercedes CLA180 calibration:
-      Gear 1: ratio ~130–180
-      Gear 2: ratio ~75–100
-      Gear 3: ratio ~50–65
-      Gear 4: ratio ~37–48
-      Gear 5: ratio ~28–36
-      Gear 6: ratio ~22–28
-    These are rough — update from serial monitor logs in Phase 5.
+    CLA180 defaults (tune via Settings menu after driving):
+      Gear 1: ratio > 85  (e.g. 4000 RPM at 47 km/h = 29 mph → ratio 85)
+      Gear 2: ratio 45–85 (e.g. 3500 RPM at 70 km/h = 43 mph → ratio 50)
+      Gear 3: ratio 19–45
+      Gear 4: ratio 12–19
+      Gear 5: ratio  8–12
+      Gear 6: ratio  < 8
     """
     if speed_kmh < 2 or rpm < 100:
         return 0
     ratio = rpm / speed_kmh
-    if ratio > 50: return 1
-    if ratio > 33: return 2
-    if ratio > 19: return 3
-    if ratio > 12: return 4
-    if ratio >  8: return 5
+    if ratio > TURBO_RATIO_GEAR12: return 1
+    if ratio > TURBO_RATIO_GEAR23: return 2
+    if ratio > 19:                 return 3
+    if ratio > 12:                 return 4
+    if ratio >  8:                 return 5
     return 6
 
 
@@ -105,6 +106,9 @@ class MenuController:
         ("Cooldown ms", "cooldown_ms",100.0, 500.0,10000.0),
         ("Vol Gear 1",  "vol_gear1",   1.0,   0.0,   30.0),
         ("Vol Gear 2",  "vol_gear2",   1.0,   0.0,   30.0),
+        ("Ratio G1/G2", "ratio12",     5.0,  30.0,  200.0),
+        ("Ratio G2/G3", "ratio23",     5.0,  20.0,  150.0),
+        ("Vol Voice",   "vol_voice",   1.0,   0.0,   30.0),
     ]
     NUM_SETTINGS = len(CFG_DEFS)   # Back is index NUM_SETTINGS
 
@@ -115,14 +119,17 @@ class MenuController:
         self.system_on    = True
         self.demo_mode    = False
         # Settings values — defaults mirror C++ cfg* initial values
-        self.tps_high    = 60.0
-        self.tps_low     = 10.0
-        self.rpm_min     = 3000.0
-        self.min_gear    = 1.0
-        self.max_gear    = 2.0
-        self.cooldown_ms = 2000.0
+        self.tps_high    = TURBO_THROTTLE_HIGH
+        self.tps_low     = TURBO_THROTTLE_LOW
+        self.rpm_min     = TURBO_RPM_MIN
+        self.min_gear    = float(TURBO_MIN_GEAR)
+        self.max_gear    = float(TURBO_MAX_GEAR)
+        self.cooldown_ms = float(TURBO_COOLDOWN_MS)
         self.vol_gear1   = 30.0
         self.vol_gear2   = 27.0
+        self.ratio12     = TURBO_RATIO_GEAR12
+        self.ratio23     = TURBO_RATIO_GEAR23
+        self.vol_voice   = 13.0
 
     def button_press(self):
         """Simulate one encoder button press."""
