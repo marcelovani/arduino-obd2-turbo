@@ -120,31 +120,38 @@ class TestTurboTrigger:
         assert not turbo.update(0, 800, 0, 100)
         assert turbo.count == 0
 
-    def test_triggers_on_sharp_lift_in_first_gear(self):
+    def test_triggers_on_sharp_lift_in_second_gear(self):
         turbo = TurboTrigger()
-        turbo.update(80, 3200, 22, 0)     # high TPS, 1st gear
-        triggered = turbo.update(4, 3100, 24, 100)  # lift off
+        turbo.update(80, 3200, 80, 0)    # high TPS, 2nd gear (ratio 40)
+        triggered = turbo.update(4, 3100, 82, 100)   # lift off
+        assert triggered
+        assert turbo.count == 1
+
+    def test_triggers_in_first_gear(self):
+        turbo = TurboTrigger()
+        turbo.update(80, 3200, 22, 0)    # 1st gear (ratio 145 → gear 1)
+        triggered = turbo.update(4, 3100, 24, 100)
         assert triggered
         assert turbo.count == 1
 
     def test_no_trigger_when_rpm_too_low(self):
         turbo = TurboTrigger()
-        turbo.update(75, 1200, 12, 0)    # high TPS but RPM < 1500
-        triggered = turbo.update(4, 1100, 14, 100)
+        turbo.update(75, 1500, 42, 0)    # high TPS, 2nd gear (ratio 36), but RPM < 3000
+        triggered = turbo.update(4, 1400, 44, 100)
         assert not triggered
         assert turbo.count == 0
 
     def test_no_trigger_in_third_gear(self):
         turbo = TurboTrigger()
-        turbo.update(80, 3000, 120, 0)   # 3rd gear (ratio 25 → gear 3)
-        triggered = turbo.update(4, 2800, 122, 100)
+        turbo.update(80, 3200, 120, 0)   # 3rd gear (ratio 27 → gear 3)
+        triggered = turbo.update(4, 3100, 122, 100)
         assert not triggered
         assert turbo.count == 0
 
     def test_no_trigger_when_prev_tps_not_high_enough(self):
         turbo = TurboTrigger()
-        turbo.update(35, 3000, 22, 0)    # TPS only 35% — below 40% threshold
-        triggered = turbo.update(4, 2900, 24, 100)
+        turbo.update(55, 3200, 80, 0)    # TPS only 55% — below 60% threshold
+        triggered = turbo.update(4, 3100, 82, 100)
         assert not triggered
 
     def test_no_trigger_when_curr_tps_not_low_enough(self):
@@ -155,39 +162,39 @@ class TestTurboTrigger:
 
     def test_cooldown_blocks_rapid_second_trigger(self):
         turbo = TurboTrigger()
-        turbo.update(80, 3200, 22, 0)
-        turbo.update(4,  3100, 24, 100)   # Turbo #1 at t=100ms
-        turbo.update(80, 2800, 28, 200)   # back on throttle
-        triggered = turbo.update(4, 2700, 30, 300)  # within 2s cooldown
+        turbo.update(80, 3200, 80, 0)
+        turbo.update(4,  3100, 82, 100)   # Turbo #1 at t=100ms (gear 2, ratio 38)
+        turbo.update(80, 3200, 80, 200)   # back on throttle
+        triggered = turbo.update(4, 3100, 82, 300)   # within 2s cooldown
         assert not triggered
         assert turbo.count == 1
 
     def test_cooldown_allows_trigger_after_expiry(self):
         turbo = TurboTrigger()
-        turbo.update(80, 3200, 22, 0)
-        turbo.update(4,  3100, 24, 100)    # Turbo #1
-        turbo.update(80, 2800, 28, 200)
-        turbo.update(4,  2700, 30, 300)    # blocked by cooldown
-        turbo.update(80, 3100, 35, 2200)   # after cooldown
-        triggered = turbo.update(4, 3000, 37, 2300)  # Turbo #2
+        turbo.update(80, 3200, 80, 0)
+        turbo.update(4,  3100, 82, 100)   # Turbo #1 (gear 2, ratio 38)
+        turbo.update(80, 3200, 80, 200)
+        turbo.update(4,  3100, 82, 300)   # blocked by cooldown
+        turbo.update(80, 3200, 80, 2200)  # after cooldown
+        triggered = turbo.update(4, 3100, 82, 2300)  # Turbo #2
         assert triggered
         assert turbo.count == 2
 
     def test_custom_thresholds(self):
-        # More sensitive: lower throttle_high=25%, lower rpm_min=1000
-        # Speed=8 km/h → RPM/speed ratio=150 → gear 1 (within max_gear=2)
-        turbo = TurboTrigger(throttle_high=25, rpm_min=1000)
+        # More sensitive: lower throttle_high=25%, lower rpm_min=1000, min_gear=1
+        # Speed=8 km/h → RPM/speed ratio=150 → gear 1; min_gear=1 allows it
+        turbo = TurboTrigger(throttle_high=25, rpm_min=1000, min_gear=1)
         turbo.update(30, 1200, 8, 0)
         triggered = turbo.update(4, 1100, 8, 100)
         assert triggered
 
     def test_event_log_recorded(self):
         turbo = TurboTrigger()
-        turbo.update(80, 3200, 22, 0)
-        turbo.update(4,  3100, 24, 100)
+        turbo.update(80, 3200, 80, 0)   # 2nd gear (ratio 40)
+        turbo.update(4,  3100, 82, 100)
         assert len(turbo.events) == 1
         event = turbo.events[0]
-        assert event["gear"] == 1
+        assert event["gear"] == 2
         assert event["prev_tps"] == 80
         assert event["tps"] == 4
 

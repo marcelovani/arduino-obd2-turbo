@@ -17,7 +17,8 @@ Target car: Mercedes CLA180, 2011, gasoline, manual gearbox.
 ## Key decisions already made
 
 - Board: ELEGOO ESP-WROOM-32 (ESP-WROOM-32 chip, Bluetooth Classic)
-- OLED: 0.96" SSD1306 (model ep0096dtan001a) — use `U8G2_SSD1306_128X64_NONAME_F_HW_I2C`
+- OLED: 0.96" SSD1306 SPI (pins: GND,VCC,D0,D1,RES,DC,CS) — real device uses `U8G2_SSD1306_128X64_NONAME_F_4W_HW_SPI`; Wokwi simulation uses `U8G2_SSD1306_128X64_NONAME_F_HW_I2C` (Wokwi's component is I2C-only)
+- OLED SPI pins (real device): SCK=GPIO18, MOSI=GPIO23, RES=GPIO15, DC=GPIO32, CS=GPIO5
 - Audio: DFPlayer Mini on Serial2 (GPIO 16 RX, GPIO 17 TX)
 - Input: KY-040 rotary encoder (GPIO 25 CLK, 26 DT, 27 SW)
 - Libraries: U8g2 (not U8glib), DFRobotDFPlayerMini, Bounce2
@@ -25,6 +26,8 @@ Target car: Mercedes CLA180, 2011, gasoline, manual gearbox.
 - G-force displayed relative to 1g (gravity subtracted)
 - Gearbox is manual — Turbo trigger uses throttle-drop detection (no clutch PID needed)
 - Speaker via DFPlayer Mini's built-in 3W amp (SPK1/SPK2 pins)
+- DFPlayer VCC: 3.3V (from ESP32 3V3 pin) — spec is 3.2–5V so 3.3V works fine; no separate 5V supply needed
+- DFPlayer RX: 1kΩ resistor in series (protective; legs at E21–F21 bridging breadboard centre gap)
 - Future upgrade: Bluetooth audio to car radio via separate A2DP transmitter module (ESP32 BT is occupied by OBD2)
 - Turbo triggers on throttle drop: >40% → <10%, RPM >1500, gear ≤ 2
 
@@ -32,10 +35,10 @@ Target car: Mercedes CLA180, 2011, gasoline, manual gearbox.
 
 The Wokwi sim replaces real-device peripherals with two components on GPIO:
 
-| Component | Pin | Role |
-| --------- | --- | ---- |
+| Component      | Pin          | Role                                                           |
+| -------------- | ------------ | -------------------------------------------------------------- |
 | Passive buzzer | GPIO17 (TX2) | `tone(900 Hz, 350 ms)` on every Turbo fire — replaces DFPlayer |
-| Red LED | GPIO4 | Blinks for 1 s after each Turbo fire — visual indicator |
+| Red LED        | GPIO4        | Blinks for 1 s after each Turbo fire — visual indicator        |
 
 **Note: GPIO2 is the ESP32 DevKit built-in LED — do not use it for external circuits.**
 GPIO17 (TX2) is free in simulation because DFPlayer (`PIN_DFP_TX`) is `#else`-guarded.

@@ -15,10 +15,11 @@ When you change a threshold or algorithm in the sketch, update it here too.
 # ── Turbo trigger thresholds ────────────────────────────────────────────────
 # Keep in sync with #define TURBO_* in the sketches
 
-TURBO_THROTTLE_HIGH = 40.0   # TPS must have been aturboe this (accelerating)
+TURBO_THROTTLE_HIGH = 60.0   # TPS must have been above this (hard acceleration)
 TURBO_THROTTLE_LOW  = 10.0   # TPS must now be below this (lifted off)
-TURBO_RPM_MIN       = 1500.0 # must be in boost range
-TURBO_MAX_GEAR      = 2      # only trigger in 1st and 2nd gear
+TURBO_RPM_MIN       = 3000.0 # must be near peak RPM (about to shift)
+TURBO_MIN_GEAR      = 1      # trigger from 1st gear upward
+TURBO_MAX_GEAR      = 2      # only trigger in 2nd gear or lower
 TURBO_COOLDOWN_MS   = 2000   # min ms between Turbo sounds
 
 
@@ -95,12 +96,14 @@ class TurboTrigger:
         throttle_high: float = TURBO_THROTTLE_HIGH,
         throttle_low:  float = TURBO_THROTTLE_LOW,
         rpm_min:       float = TURBO_RPM_MIN,
+        min_gear:      int   = TURBO_MIN_GEAR,
         max_gear:      int   = TURBO_MAX_GEAR,
         cooldown_ms:   float = TURBO_COOLDOWN_MS,
     ):
         self.throttle_high = throttle_high
         self.throttle_low  = throttle_low
         self.rpm_min       = rpm_min
+        self.min_gear      = min_gear
         self.max_gear      = max_gear
         self.cooldown_ms   = cooldown_ms
 
@@ -120,7 +123,7 @@ class TurboTrigger:
             and self._prev_tps > self.throttle_high
             and tps            < self.throttle_low
             and rpm            > self.rpm_min
-            and 0 < gear      <= self.max_gear
+            and self.min_gear <= gear <= self.max_gear
         )
         if triggered:
             self._last_turbo_ms = now_ms

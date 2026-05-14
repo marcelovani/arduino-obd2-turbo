@@ -36,8 +36,8 @@ distinctive "pssssh" sound. This device detects that moment from OBD2 data:
 | ----------------------- | ---------------------------------------------------- |
 | ELEGOO ESP-WROOM-32     | Main microcontroller — Bluetooth Classic             |
 | ELM327 Bluetooth dongle | Plugs into car OBD2 port                             |
-| 0.96" SSD1306 OLED      | 128×64 I2C display (model ep0096dtan001a)            |
-| DFPlayer Mini           | MP3 playback module — drives the speaker             |
+| 0.96" SSD1306 OLED      | 128×64 SPI display (pins: GND,VCC,D0,D1,RES,DC,CS)   |
+| DFPlayer Mini           | MP3 playback module — 3.3V power, 1kΩ on RX line     |
 | KY-040 rotary encoder   | Navigation: rotate = cycle views, click = disconnect |
 | microSD card (FAT32)    | Stores Turbo sound as `/mp3/0001.mp3`                |
 | Small speaker (4–8 Ω)   | Plays the Turbo sound                                |
@@ -61,8 +61,18 @@ your first real-car test.
 
 ### Sketch
 
-`sketches/turbo/turbo.ino` — single source file, compiles for both the real
-device and the Wokwi simulation (`#ifdef SIMULATION`).
+`sketches/turbo/turbo.ino` — single source file with three build modes
+selected by compile-time flags:
+
+| Flag           | Command            | Hardware                                   | OBD2                   | Audio              | Scenario                  |
+| -------------- | ------------------ | ------------------------------------------ | ---------------------- | ------------------ | ------------------------- |
+| `-DSIMULATION` | `make wokwi-build` | Wokwi (I2C OLED, buzzer GPIO17, LED GPIO4) | No                     | 900 Hz buzzer beep | Built-in 24 s loop (auto) |
+| `-DDEMO`       | `make demo-upload` | Real ESP32 (SPI OLED, DFPlayer, speaker)   | No                     | MP3 via DFPlayer   | Built-in 24 s loop (auto) |
+| _(none)_       | `make deploy`      | Real ESP32                                 | Yes — Bluetooth ELM327 | MP3 via DFPlayer   | Live OBD2 data            |
+
+The built-in scenario fires two Turbo triggers per loop: one during a
+1st→2nd gear change at ~9.5 s and one during a 2nd→3rd gear change at ~12.5 s.
+Encoder button resets the counter (simulation) or restarts the scenario (demo).
 
 ### Arduino IDE (for flashing to the real device)
 
@@ -125,7 +135,7 @@ Simulated hardware (replaces real-device peripherals under `#ifdef SIMULATION`):
 
 | Component      | Pin             | Role                                                                  |
 | -------------- | --------------- | --------------------------------------------------------------------- |
-| SSD1306 OLED   | I2C (GPIO21/22) | Same as real device                                                   |
+| SSD1306 OLED   | I2C (GPIO21/22) | Same display, but I2C — Wokwi's SSD1306 component only supports I2C   |
 | KY-040 encoder | GPIO25/26/27    | Same as real device                                                   |
 | Passive buzzer | GPIO17 (TX2)    | Plays 900 Hz beep for 350 ms when Turbo fires (replaces DFPlayer MP3) |
 | Red LED        | GPIO4           | Blinks for 1 s after each Turbo fire (visual indicator)               |
@@ -221,16 +231,14 @@ in `TURBO_*` constants (see the calibration note in `tests/obd_logic.py`).
 3. Tools → Port → `/dev/cu.usbserial-...` (Mac) or `COM...` (Windows)
 4. Upload sketch, then open Serial Monitor (Ctrl+Shift+M) at **115200 baud**
 
-**Option B — arduino-cli (command line)**
+**Option B — `make deploy` (command line)**
 
 ```bash
-arduino-cli upload \
-    --fqbn esp32:esp32:esp32doit-devkit-v1 \
-    --port /dev/cu.usbserial-... \
-    sketches/turbo
+make deploy                              # auto-detects /dev/cu.usbserial-* or /dev/cu.SLAB_USBtoUART*
+make deploy PORT=/dev/cu.usbserial-XXXX  # specify port manually
 ```
 
-Replace `/dev/cu.usbserial-...` with your actual port (`COM...` on Windows).
+Compiles production firmware (no simulation flags) and flashes it in one step.
 Then open any serial monitor at **115200 baud** to watch the OBD2 output.
 
 ### Typical workflow
@@ -240,7 +248,7 @@ Then open any serial monitor at **115200 baud** to watch the OBD2 output.
 | Threshold constant         | `make test-unit` → `make scenario`   |
 | Driving scenario data      | `make test-unit` → `make scenario`   |
 | Display / UI code          | `make wokwi-build` + Wokwi simulator |
-| OBD2 / Bluetooth code      | Flash to ESP32 → Serial Monitor      |
+| OBD2 / Bluetooth code      | `make deploy` → Serial Monitor       |
 | Everything before car test | All four layers in order             |
 
 ---

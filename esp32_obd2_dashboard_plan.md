@@ -80,8 +80,7 @@ These can be adjusted to taste once tested in the car.
 | Item                             | Approx price (UK) | Status   | Notes                                                         |
 | -------------------------------- | ----------------- | -------- | ------------------------------------------------------------- |
 | ELEGOO ESP-WROOM-32 DevKit       | £6–8              | To order | Bluetooth Classic + BLE + WiFi. [Amazon link][amz-esp32]      |
-| 0.96" SSD1306 OLED (128x64, I2C) | —                 | Have it  | Model ep0096dtan001a. I2C address 0x3C                        |
-| MPU6050 IMU module (I2C)         | —                 | Have it  | 3-axis accelerometer + gyro, address 0x68                     |
+| 0.96" SSD1306 OLED (128x64, SPI) | —                 | Have it  | Pins: GND,VCC,D0,D1,RES,DC,CS — SPI mode                      |
 | KY-040 rotary encoder module     | —                 | Have it  | 5-pin: CLK / DT / SW / + / GND                                |
 | DFPlayer Mini MP3 module         | —                 | Have it  | Same module used in [arduino-laser-target][laser-target]      |
 | microSD card (≤32 GB, FAT32)     | —                 | Check    | Must be formatted FAT32; Turbo .mp3 file goes in /mp3/ folder |
@@ -121,12 +120,11 @@ These can be adjusted to taste once tested in the car.
 │  └─────┬──────┘                                     │
 │        │                                            │
 │        ▼                                            │
-│  ┌─────────────┐    ┌─────────────────┐             │
-│  │ OBD Service │    │  IMU (MPU6050)  │             │
-│  │ (PID poller)│    │  via I2C        │             │
-│  └─────┬───────┘    └────────┬────────┘             │
-│        │                     │                      │
-│        └──────────┬──────────┘                      │
+│  ┌─────────────┐                                     │
+│  │ OBD Service │                                     │
+│  │ (PID poller)│                                     │
+│  └─────┬───────┘                                     │
+│        │                                            │
 │                   ▼                                 │
 │           ┌───────────────┐                         │
 │           │   App state   │                         │
@@ -160,37 +158,180 @@ These can be adjusted to taste once tested in the car.
   the ESP32 itself.
 - **KY-040 encoder** — CLK/DT read manually; SW debounced with Bounce2 (same
   pattern as [arduino-laser-target][laser-target]).
-- **G-force relative to 1g** — IMU Z-axis has gravity subtracted so a
-  stationary reading is ~0 G.
 
 ---
 
 ## 5. Wiring
 
-| Component       | ESP32 pin | Notes                                      |
-| --------------- | --------- | ------------------------------------------ |
-| OLED SDA        | GPIO 21   | I2C SDA (shared bus)                       |
-| OLED SCL        | GPIO 22   | I2C SCL (shared bus)                       |
-| OLED VCC        | 3.3V      |                                            |
-| OLED GND        | GND       |                                            |
-| MPU6050 SDA     | GPIO 21   | Same I2C bus, address 0x68                 |
-| MPU6050 SCL     | GPIO 22   |                                            |
-| MPU6050 VCC     | 3.3V      |                                            |
-| MPU6050 GND     | GND       |                                            |
-| KY-040 CLK      | GPIO 25   | Rotary pulse A                             |
-| KY-040 DT       | GPIO 26   | Rotary pulse B                             |
-| KY-040 SW       | GPIO 27   | Push-button, INPUT_PULLUP                  |
-| KY-040 +        | 3.3V      |                                            |
-| KY-040 GND      | GND       |                                            |
-| DFPlayer TX     | GPIO 16   | ESP32 RX2 (receives from DFPlayer)         |
-| DFPlayer RX     | GPIO 17   | ESP32 TX2 (sends commands to DFPlayer)     |
-| DFPlayer VCC    | 5V        | DFPlayer needs 5V (use VIN on ESP32 board) |
-| DFPlayer GND    | GND       |                                            |
-| DFPlayer SPK1/2 | Speaker   | Direct speaker connection (4–8 Ω)          |
+**Wiring table — to be confirmed after breadboard placement is verified.**
 
-> **Note:** DFPlayer RX has a 1kΩ resistor in series to protect it from ESP32
-> 3.3V logic — the DFPlayer is a 5V device. Many modules tolerate 3.3V TX
-> directly, but the resistor is safer.
+> **Breadboard internal connections:** all 5 holes in the same row and same
+> bank (J–F or E–A) are electrically connected. A module's pins must each go
+> into a **different row** of the same column so they stay isolated.
+>
+> **Power rails** run vertically on the **left side** (beside col J) and
+> **right side** (beside col A), each with a + and a − strip, row 1–60.
+>
+> **ESP32 occupies the full breadboard width:** left pins col J, right pins
+> col A (rows 3–17). All other components go in rows 18+.
+
+### Breadboard component placement
+
+Columns run left → right: J I H G F | centre gap | E D C B A  
+Left power rail beside J. Right power rail beside A.  
+ESP32 spans cols **I to A** (9 columns). Col J is empty, beside the left power rail.
+
+ELEGOO ESP-WROOM-32 — rotated 180°. USB hangs off above row 5. 3V3/VIN at top (rows 5–19).
+
+| Row | Col I (left side) | Col A (right side) |
+| --- | ----------------- | ------------------ |
+| 5   | 3V3               | VIN                |
+| 6   | GND               | GND                |
+| 7   | IO15              | IO13               |
+| 8   | IO2               | IO12               |
+| 9   | IO4               | IO14               |
+| 10  | IO16 (RX2)        | IO27               |
+| 11  | IO17 (TX2)        | IO26               |
+| 12  | IO5               | IO25               |
+| 13  | IO18 (SCK)        | IO33               |
+| 14  | IO19              | IO32               |
+| 15  | IO21              | IO35               |
+| 16  | IO3 (RX0)         | IO34               |
+| 17  | IO1 (TX0)         | IO39               |
+| 18  | IO22              | IO36               |
+| 19  | IO23 (MOSI)       | EN                 |
+
+```
+  [left+][-]  J    I    H    G    F  │  E    D    C    B    A  [-][+right]
+ ──────────────────────────────────────────────────────────────────────────
+  1          .    .    .    .    .  │  .    .    .    .    .
+  2          .    .    .    .    .  │  .    .    .    .    .
+  3          .    .    .    .    .  │  .    .    .    .    .
+  4          .    .    .    .    .  │  .    .    .    .    .
+  5          . [3V3]   .    .    .  │  .    .    .    .  [VIN]   ← USB above
+  6          . [GND]   .    .    .  │  .    .    .    .  [GND]
+  7          . [IO15]  .    .    .  │  .    .    .    .  [IO13]
+  8          . [IO2]   .    .    .  │  .    .    .    .  [IO12]
+  9          . [IO4]   .    .    .  │  .    .    .    .  [IO14]
+ 10          . [IO16]  .    .    .  │  .    .    .    .  [IO27]
+ 11          . [IO17]  .    .    .  │  .    .    .    .  [IO26]
+ 12          . [IO5]   .    .    .  │  .    .    .    .  [IO25]
+ 13          . [IO18]  .    .    .  │  .    .    .    .  [IO33]
+ 14          . [IO19]  .    .    .  │  .    .    .    .  [IO32]
+ 15          . [IO21]  .    .    .  │  .    .    .    .  [IO35]
+ 16          . [IO3]   .    .    .  │  .    .    .    .  [IO34]
+ 17          . [IO1]   .    .    .  │  .    .    .    .  [IO39]
+ 18          . [IO22]  .    .    .  │  .    .    .    .  [IO36]
+ 19          . [IO23]  .    .    .  │  .    .    .    .   [EN]
+ 20          .    .    .    .    .  │  .    .    .    .    .
+ 21          .    .    .    .    .  │  .    .    .    .    .
+ 22          .    .    .    .    .  │  .    .    .    .    .
+ 23          .    .    .    .    .  │  .    .    .    .    .
+ 24          .    .    .    .    .  │  .    .    .    .    .
+ 25          .    .    .    .    .  │  .    .    .    .    .
+ 26          .    .    .    .    .  │  .    .    .    .    .
+ 27          .    .    .    .    .  │  .    .    .    .    .
+ 28          .    .    .    .    .  │  .    .    .    .    .
+ 29          .    .    .    .    .  │  .    .    .    .    .
+ 30          .    .    .    .    .  │  [GND].    .    .    .    ← Encoder
+ 31          .    .    .    .    .  │  [+]  .    .    .    .
+ 32          .    .    .    .    .  │  [SW] .    .    .    .
+ 33          .    .    .    .    .  │  [DT] .    .    .    .
+ 34          .    .    .    .    .  │  [CLK].    .    .    .    ← Encoder
+ 35          .    .    .    .    .  │  .    .    .    .    .
+ 36          .    .    .    .    .  │  .    .    .    .    .
+ 37          .    .    .    .    .  │  .    .    .    .    .
+ 38          .    .    .    .    .  │  .    .    .    .    .
+ 39          .    .    .    .    .  │  .    .    .    .    .
+ 40          .    .    .    .    .  │  .    .    .    .    .
+ 41          .    .    .    .    .  │  .    .    .    .    .
+ 42          .    .    .    . [GND] │  .    .    .    .    .    ← OLED pin 1
+ 43          .    .    .    . [VCC] │  .    .    .    .    .
+ 44          .    .    .    . [SCK] │  .    .    .    .    .
+ 45          .    .    .    .[MOSI] │  .    .    .    .    .
+ 46          .    .    .    . [RES] │  .    .    .    .    .
+ 47          .    .    .    .  [DC] │  .    .    .    .    .
+ 48          .    .    .    .  [CS] │  .    .    .    .    .    ← OLED pin 7
+ 49          .    .    .    .    .  │  .    .    .    .    .
+ 50          .    .    .    .    .  │  .    .    .    .    .
+ 51          .    .    .    .    .  │  .    .    .    .    .
+ 52          . [VCC]   .    .    .  │  .    .    .    .  [BUSY]   ← DFPlayer
+ 53          .  [RX]   .    .    .  │  .    .    .    .  [USB-]
+ 54          .  [TX]   .    .    .  │  .    .    .    .  [USB+]
+ 55          .[DAC_R]  .    .    .  │  .    .    .    . [ADKEY2]
+ 56          .[DAC_I]  .    .    .  │  .    .    .    . [ADKEY1]
+ 57          .[SPK_1]  .    .    .  │  .    .    .    .  [IO_2]
+ 58          . [GND]   .    .    .  │  .    .    .    .  [GND]
+ 59          .[SPK_2]  .    .    .  │  .    .    .    .  [IO_1]
+ 60          .    .    .    .    .  │  .    .    .    .    .
+ ──────────────────────────────────────────────────────────────────────────
+```
+
+**Component notes:**
+
+- OLED 7-pin header plugs into **col F, rows 42–48** (one pin per row):
+  GND=F42, VCC=F43, SCK=F44, MOSI=F45, RES=F46, DC=F47, CS=F48.
+- DFPlayer Mini straddles the full breadboard width: left pins in **col I rows 52–59**,
+  right pins in **col A rows 52–59**. Module matches datasheet orientation:
+  VCC/BUSY at row 52, SPK_2/IO_1 at row 59.
+- KY-040 encoder 5-pin header plugs into **col E, rows 30–34** (one pin per row):
+  GND=E30, +=E31, SW=E32, DT=E33, CLK=E34.
+
+---
+
+### Wiring
+
+**Power rails**
+
+| From                | To                   | Voltage | Note       |
+| ------------------- | -------------------- | ------- | ---------- |
+| J5 (=I5, ESP32 3V3) | Left rail (+) row 5  | 3.3 V   | Short wire |
+| J6 (=I6, ESP32 GND) | Left rail (−) row 6  | GND     | Short wire |
+| A5 (ESP32 VIN)      | Right rail (+) row 5 | 5 V     | Short wire |
+| A6 (ESP32 GND)      | Right rail (−) row 6 | GND     | Short wire |
+
+**Encoder (col E, rows 30–34)**
+
+| Signal     | From | To                   | Route                               | ~Length |
+| ---------- | ---- | -------------------- | ----------------------------------- | ------- |
+| GND        | E30  | Right rail (−)       | Short right-bank wire               | 2 cm    |
+| + (3V3)    | E31  | Left rail (+) row 31 | Full-board crossing via row 31      | 5 cm    |
+| SW → IO27  | E32  | A10                  | Right bank, col E→A, routing upward | 8 cm    |
+| DT → IO26  | E33  | A11                  | Right bank, col E→A, routing upward | 8 cm    |
+| CLK → IO25 | E34  | A12                  | Right bank, col E→A, routing upward | 8 cm    |
+
+**OLED (col F, rows 42–48)**
+
+| Signal      | From | To            | Route                                        | ~Length |
+| ----------- | ---- | ------------- | -------------------------------------------- | ------- |
+| GND         | F42  | Left rail (−) | Short left-bank wire                         | 2 cm    |
+| VCC (3V3)   | F43  | Left rail (+) | Short left-bank wire                         | 2 cm    |
+| SCK → IO18  | F44  | J13           | Left bank, cols F→J, routing upward          | 11 cm   |
+| MOSI → IO23 | F45  | J19           | Left bank, cols F→J, routing upward          | 10 cm   |
+| RES → IO15  | F46  | J7            | Left bank, cols F→J, routing upward          | 13 cm   |
+| DC → IO32   | F47  | A14           | Full-board cross: left bank F → right bank A | 15 cm   |
+| CS → IO5    | F48  | J12           | Left bank, cols F→J, routing upward          | 13 cm   |
+
+**DFPlayer Mini (col I, rows 52–59)**
+
+| Signal      | From | To                   | Route                                          | ~Length |
+| ----------- | ---- | -------------------- | ---------------------------------------------- | ------- |
+| VCC (3V3)   | I52  | Left rail (+)        | Short wire via J52                             | 2 cm    |
+| RX → IO17   | I53  | H36 (resistor leg 2) | Left bank, routing upward — see resistor below | 6 cm    |
+| TX → IO16   | I54  | J10                  | Left bank, cols I→J, routing upward            | 14 cm   |
+| GND         | I58  | Left rail (−)        | Short wire via J58                             | 2 cm    |
+| SPK_1       | I57  | Mini-amp             | External                                       | —       |
+| SPK_2       | I59  | Mini-amp             | External                                       | —       |
+| GND (right) | A58  | Right rail (−)       | Short right-bank wire                          | 2 cm    |
+
+**1 kΩ resistor — DFPlayer RX line (placed at col H, rows 35–36)**
+
+| Leg | Hole | Connected to                         |
+| --- | ---- | ------------------------------------ |
+| 1   | H35  | J11 via wire (=I11=IO17/TX2) — ~8 cm |
+| 2   | H36  | I53 via wire (DFPlayer RX) — ~6 cm   |
+
+The resistor sits vertically in col H bridging rows 35→36. It stays on the left bank, in the free area between encoder (row 34) and OLED (row 42).
 
 ---
 
@@ -205,12 +346,12 @@ These can be adjusted to taste once tested in the car.
 
 ### Libraries (Library Manager)
 
-| Library               | Purpose                                          |
-| --------------------- | ------------------------------------------------ |
-| `BluetoothSerial`     | Built into ESP32 core                            |
-| `U8g2`                | OLED — use `U8G2_SSD1306_128X64_NONAME_F_HW_I2C` |
-| `DFRobotDFPlayerMini` | DFPlayer Mini MP3 module driver                  |
-| `Bounce2`             | KY-040 button debounce                           |
+| Library               | Purpose                                                                                                        |
+| --------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `BluetoothSerial`     | Built into ESP32 core                                                                                          |
+| `U8g2`                | OLED — real device: `U8G2_SSD1306_128X64_NONAME_F_4W_HW_SPI`; Wokwi sim: `U8G2_SSD1306_128X64_NONAME_F_HW_I2C` |
+| `DFRobotDFPlayerMini` | DFPlayer Mini MP3 module driver                                                                                |
+| `Bounce2`             | KY-040 button debounce                                                                                         |
 
 > **Note:** The [arduino-laser-target][laser-target] reference project uses
 > `U8glib` (older) and `DFRobotDFPlayerMini`. We use **U8g2** (same author,
@@ -360,7 +501,6 @@ encoder turns are lost, even mid-poll.
 
 - [ ] Flash "Blink" — confirm ESP32 toolchain
 - [ ] Wire OLED, run `oled_test.ino` — confirm SSD1306 displays counter
-- [ ] Wire MPU6050, confirm acceleration values in serial monitor
 - [ ] Wire KY-040, confirm rotation direction + click in serial monitor
 - [ ] Wire DFPlayer Mini, play `0001.mp3` from SD card
 
@@ -450,12 +590,17 @@ and the speaker plays the Turbo sound on demand.
 
 - **ESP32 BluetoothSerial docs:** https://github.com/espressif/arduino-esp32/tree/master/libraries/BluetoothSerial
 - **ELEGOO ESP-WROOM-32 (chosen board):** https://www.amazon.co.uk/ELEGOO-ESP-WROOM-32-Development-Micro-USB-Microcontroller/dp/B0D8T5P8JM
+- **ELEGOO ESP32 official wiki (pinout):** https://wiki.elegoo.com/oshw-getting-started-kits/first-look-esp32
+- **ESP32-WROOM-32 pinout reference:** https://lastminuteengineers.com/esp32-wroom-32-pinout-reference/
+- **DOIT ESP32 DevKit V1 pinout diagram:** https://www.circuitstate.com/pinouts/doit-esp32-devkit-v1-wifi-development-board-pinout-diagram-and-reference/
 - **ESP32-C3 SuperMini (rejected — BLE only):** https://www.amazon.co.uk/Youmile-Development-SuperMini-Bluetooth-Frequency/dp/B0D2WSYRZM
 
 ### Display, audio, encoder
 
 - **U8g2 graphics library:** https://github.com/olikraus/u8g2/wiki
-- **DFPlayer Mini wiki:** https://wiki.dfrobot.com/DFPlayer_Mini_SKU_DFR0299
+- **DFPlayer Mini wiki (pinout & API):** https://wiki.dfrobot.com/DFPlayer_Mini_SKU_DFR0299
+- **DFPlayer Mini pinout & protocol reference:** https://wiki.dfrobot.com/dfr0299/docs/20906
+- **DFPlayer Mini wiring diagrams (mono/stereo):** https://circuitjournal.com/how-to-use-the-dfplayer-mini-mp3-module-with-an-arduino
 
 ### Reference projects
 
@@ -466,12 +611,12 @@ and the speaker plays the Turbo sound on demand.
 
 Four layers — run in order, see the Testing section in README.md for full commands.
 
-| Layer            | Command                      | What it checks                                              | Hardware needed |
-| ---------------- | ---------------------------- | ----------------------------------------------------------- | --------------- |
-| Unit tests       | `make test-unit`             | parse_pid, estimate_gear, TurboTrigger logic, all scenarios | None            |
-| Visual monitor   | `make scenario`              | Trigger timing and sequence, threshold tuning               | None            |
-| Wokwi simulation | `make wokwi-build` + VS Code | Compiled firmware, OLED, encoder, buzzer (GPIO17), LED (GPIO4) | None          |
-| Serial Monitor   | Flash → Arduino IDE          | Full OBD2 + BT stack, real triggers, gear calibration       | ESP32 via USB   |
+| Layer            | Command                      | What it checks                                                 | Hardware needed |
+| ---------------- | ---------------------------- | -------------------------------------------------------------- | --------------- |
+| Unit tests       | `make test-unit`             | parse_pid, estimate_gear, TurboTrigger logic, all scenarios    | None            |
+| Visual monitor   | `make scenario`              | Trigger timing and sequence, threshold tuning                  | None            |
+| Wokwi simulation | `make wokwi-build` + VS Code | Compiled firmware, OLED, encoder, buzzer (GPIO17), LED (GPIO4) | None            |
+| Serial Monitor   | Flash → Arduino IDE          | Full OBD2 + BT stack, real triggers, gear calibration          | ESP32 via USB   |
 
 - **ELM327 emulator (integration tests without a car):** https://github.com/Ircama/ELM327-emulator
   — used by `make test-emulator` via `tests/integration/mock_elm327.py`
@@ -485,13 +630,11 @@ Four layers — run in order, see the Testing section in README.md for full comm
 
 ```cpp
 // arduino-obd2-turbo — main sketch
-// Libraries: BluetoothSerial (built-in), U8g2, DFRobotDFPlayerMini, Bounce2,
-//            Adafruit MPU6050, Adafruit Unified Sensor
+// Libraries: BluetoothSerial (built-in), U8g2, DFRobotDFPlayerMini, Bounce2
 
 #include <BluetoothSerial.h>
 #include <U8g2lib.h>
 #include <DFRobotDFPlayerMini.h>
-#include <Adafruit_MPU6050.h>
 #include <Bounce2.h>
 
 // ── Pins ─────────────────────────────────────────────────────────────────
@@ -516,9 +659,9 @@ Four layers — run in order, see the Testing section in README.md for full comm
 
 // ── Objects ───────────────────────────────────────────────────────────────
 BluetoothSerial BT;
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C oled(U8G2_R0, U8X8_PIN_NONE);
+// Real device: SPI OLED (SCK=18, MOSI=23, RES=15, DC=32, CS=5)
+U8G2_SSD1306_128X64_NONAME_F_4W_HW_SPI oled(U8G2_R0, /*cs=*/5, /*dc=*/32, /*reset=*/15);
 DFRobotDFPlayerMini dfplayer;
-Adafruit_MPU6050 mpu;
 Bounce encBtn;
 
 // ── State ─────────────────────────────────────────────────────────────────
@@ -557,10 +700,7 @@ void setup() {
     Serial.begin(115200);
     Serial2.begin(9600, SERIAL_8N1, PIN_DFP_RX, PIN_DFP_TX);
 
-    Wire.begin();
     oled.begin();
-    mpu.begin();
-
     dfplayer.begin(Serial2);
     dfplayer.volume(25);   // 0–30
 
