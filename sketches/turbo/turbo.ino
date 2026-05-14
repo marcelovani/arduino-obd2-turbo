@@ -102,7 +102,7 @@ Bounce encBtn;
   DFRobotDFPlayerMini dfplayer;
 #endif
 
-// ── Encoder ISR (real device only) ───────────────────────────────────────
+// ── Encoder ISR (all builds including Wokwi simulation) ──────────────────
 // Bounce2 handles the SW button (encBtn) — one pin, polled in loop().
 //
 // Rotation uses a single ISR on CLK FALLING only. When CLK falls, DT is
@@ -115,25 +115,26 @@ Bounce encBtn;
 //
 // 3000 µs self-debounce on CLK prevents the same edge being counted twice
 // during contact bounce. DT is stable by the time CLK bounces again.
-#ifndef SIMULATION
-  volatile int           encDelta = 0;
-  volatile unsigned long encClkUs = 0;
+//
+// Wokwi supports attachInterrupt on ESP32 — using the ISR in simulation
+// means every KY-040 CLK edge is captured instantly regardless of how
+// slow the display render is, fixing the "must click 10 times" problem.
+volatile int           encDelta = 0;
+volatile unsigned long encClkUs = 0;
 
-  void IRAM_ATTR encISR_CLK() {
-    unsigned long now = micros();
-    if (now - encClkUs < 3000) return;             // self-debounce
-    encClkUs = now;
-    if (digitalRead(PIN_ENC_DT) == LOW)
-      encDelta++;   // CLK fell, DT already LOW → CW
-    else
-      encDelta--;   // CLK fell, DT still HIGH → CCW
-  }
-#endif
+void IRAM_ATTR encISR_CLK() {
+  unsigned long now = micros();
+  if (now - encClkUs < 3000) return;             // self-debounce
+  encClkUs = now;
+  if (digitalRead(PIN_ENC_DT) == LOW)
+    encDelta--;   // CLK fell, DT already LOW → CCW
+  else
+    encDelta++;   // CLK fell, DT still HIGH → CW
+}
 
 // ── Shared state ──────────────────────────────────────────────────────────
 int      currentView  = 0;     // 0=throttle+bars, 1=text only
 int      encoderPos   = 0;     // 0..(NUM_VIEWS*STEPS_PER_ZONE-1)
-int      lastClk      = HIGH;
 
 float    metricTPS      = 0;
 float    metricSpeed    = 0;
@@ -431,16 +432,8 @@ void readEncoder() {
     }
   }
 
-#ifdef SIMULATION
-  // Simulation: poll CLK directly (no blocking calls to miss pulses)
-  int clk = digitalRead(PIN_ENC_CLK);
-  if (clk != lastClk && clk == LOW) {
-    int delta = (digitalRead(PIN_ENC_DT) != clk) ? -1 : 1;
-    applyDelta(delta);
-  }
-  lastClk = clk;
-#else
-  // Real device: consume delta accumulated by the ISR
+  // Consume delta accumulated by the ISR (all builds, including Wokwi simulation).
+  // Wokwi supports attachInterrupt on ESP32, so every CLK edge is captured instantly.
   if (encDelta != 0) {
     noInterrupts();
     int delta = encDelta;
@@ -451,7 +444,6 @@ void readEncoder() {
     if (menuState == MENU_CLOSED) lastEncActiveMs = millis();
 #endif
   }
-#endif
 }
 
 void applyDelta(int delta) {
@@ -1027,11 +1019,8 @@ void setup() {
   pinMode(PIN_ENC_DT,  INPUT_PULLUP);
   encBtn.attach(PIN_ENC_SW, INPUT_PULLUP);
   encBtn.interval(10);
-  lastClk = digitalRead(PIN_ENC_CLK);
-#ifndef SIMULATION
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_CLK), encISR_CLK, FALLING);
   // PIN_ENC_DT needs no interrupt — it is read inside encISR_CLK directly
-#endif
 
 #ifdef SIMULATION
   pinMode(PIN_BUZZER, OUTPUT);

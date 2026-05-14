@@ -32,15 +32,15 @@ distinctive "pssssh" sound. This device detects that moment from OBD2 data:
 
 ## Hardware
 
-| Component               | Notes                                                   |
-| ----------------------- | ------------------------------------------------------- |
-| ELEGOO ESP-WROOM-32     | Main microcontroller — Bluetooth Classic + BLE          |
-| OBD BLE dongle          | BLE (not Classic BT) — plugs into car OBD2 port         |
-| 0.96" SSD1306 OLED      | 128×64 SPI display (pins: GND,VCC,D0,D1,RES,DC,CS)      |
-| DFPlayer Mini           | MP3 playback module — 3.3V power, 1kΩ on RX line        |
-| KY-040 rotary encoder   | Navigation: rotate = cycle views, click = disconnect    |
-| microSD card (FAT32)    | Stores audio files in `/mp3/` — see Audio files section |
-| Small speaker (4–8 Ω)   | Plays the Turbo sound                                   |
+| Component             | Notes                                                   |
+| --------------------- | ------------------------------------------------------- |
+| ELEGOO ESP-WROOM-32   | Main microcontroller — Bluetooth Classic + BLE          |
+| OBD BLE dongle        | BLE (not Classic BT) — plugs into car OBD2 port         |
+| 0.96" SSD1306 OLED    | 128×64 SPI display (pins: GND,VCC,D0,D1,RES,DC,CS)      |
+| DFPlayer Mini         | MP3 playback module — 3.3V power, 1kΩ on RX line        |
+| KY-040 rotary encoder | Navigation: rotate = cycle views, click = disconnect    |
+| microSD card (FAT32)  | Stores audio files in `/mp3/` — see Audio files section |
+| Small speaker (4–8 Ω) | Plays the Turbo sound                                   |
 
 ---
 
@@ -136,10 +136,10 @@ your first real-car test.
 `sketches/turbo/turbo.ino` — single source file with three build modes
 selected by compile-time flags:
 
-| Flag           | Command            | Hardware                                   | OBD2                | Audio              | Scenario                  |
-| -------------- | ------------------ | ------------------------------------------ | ------------------- | ------------------ | ------------------------- |
-| `-DSIMULATION` | `make wokwi-build` | Wokwi (I2C OLED, buzzer GPIO17, LED GPIO4) | No                  | 900 Hz buzzer beep | Built-in 24 s loop (auto) |
-| `-DDEMO`       | `make demo-upload` | Real ESP32 (SPI OLED, DFPlayer, speaker)   | No                  | MP3 via DFPlayer   | Built-in 24 s loop (auto) |
+| Flag           | Command            | Hardware                                   | OBD2                 | Audio              | Scenario                  |
+| -------------- | ------------------ | ------------------------------------------ | -------------------- | ------------------ | ------------------------- |
+| `-DSIMULATION` | `make wokwi-build` | Wokwi (I2C OLED, buzzer GPIO17, LED GPIO4) | No                   | 900 Hz buzzer beep | Built-in 24 s loop (auto) |
+| `-DDEMO`       | `make demo-upload` | Real ESP32 (SPI OLED, DFPlayer, speaker)   | No                   | MP3 via DFPlayer   | Built-in 24 s loop (auto) |
 | _(none)_       | `make deploy`      | Real ESP32                                 | Yes — BLE OBD dongle | MP3 via DFPlayer   | Live OBD2 data            |
 
 The built-in scenario fires two Turbo triggers per loop: one during a
@@ -177,12 +177,12 @@ make wokwi-setup
 
 ### Arduino libraries
 
-| Library               | Install via                                              |
-| --------------------- | -------------------------------------------------------- |
-| `U8g2`                | Arduino IDE Library Manager                              |
-| `DFRobotDFPlayerMini` | Arduino IDE Library Manager                              |
-| `Bounce2`             | Arduino IDE Library Manager                              |
-| `ESP32 BLE Arduino`   | Built-in (part of ESP32 board package — `BLEDevice.h`)  |
+| Library               | Install via                                            |
+| --------------------- | ------------------------------------------------------ |
+| `U8g2`                | Arduino IDE Library Manager                            |
+| `DFRobotDFPlayerMini` | Arduino IDE Library Manager                            |
+| `Bounce2`             | Arduino IDE Library Manager                            |
+| `ESP32 BLE Arduino`   | Built-in (part of ESP32 board package — `BLEDevice.h`) |
 
 `make wokwi-setup` installs `U8g2` and `Bounce2` via arduino-cli automatically.
 
