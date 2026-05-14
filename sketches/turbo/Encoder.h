@@ -10,6 +10,12 @@
 // Button — Bounce2 library (10 ms debounce).
 // applyDelta() must be declared before readEncoder() because readEncoder calls it.
 
+// Forward declarations for functions defined in later-included modules.
+#if !defined(SIMULATION)
+void stopRecording();
+void stopWifiExport();
+#endif
+
 Bounce encBtn;
 
 volatile int           encDelta = 0;
@@ -47,6 +53,8 @@ void applyDelta(int delta) {
     float* v = CFG_DEFS[settSel].val;
     *v = constrain(*v + delta * CFG_DEFS[settSel].step,
                    CFG_DEFS[settSel].vmin, CFG_DEFS[settSel].vmax);
+  } else if (menuState == MENU_RECORDING || menuState == MENU_EXPORT) {
+    // no rotation in recording or export modes
   } else {
     int total = NUM_VIEWS * STEPS_PER_ZONE;
     encoderPos  = ((encoderPos + delta) % total + total) % total;
@@ -70,6 +78,16 @@ void readEncoder() {
       execSettingsMenu();
     } else if (menuState == MENU_EDIT) {
       menuState = MENU_SETTINGS;
+    } else if (menuState == MENU_RECORDING) {
+#if !defined(SIMULATION)
+      stopRecording();
+#endif
+      menuState = MENU_MAIN;
+    } else if (menuState == MENU_EXPORT) {
+#if !defined(SIMULATION)
+      stopWifiExport();
+#endif
+      menuState = MENU_MAIN;
     }
   }
 

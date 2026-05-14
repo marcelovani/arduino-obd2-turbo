@@ -76,7 +76,7 @@ void doSimLoop(uint32_t now) {
         advanceScenario();
         checkTurbo(now);
       }
-      if (now - lastDrawMs >= 50) {
+      if (now - lastDrawMs >= 50 && menuState == MENU_CLOSED) {
         drawDisplay();
         lastDrawMs = now;
       }

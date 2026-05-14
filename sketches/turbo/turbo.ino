@@ -29,6 +29,9 @@
 #else
   #include <SPI.h>
   #include <Preferences.h>
+  #include <LittleFS.h>
+  #include <WiFi.h>
+  #include <WebServer.h>
   #ifndef DEMO
     #include <BLEDevice.h>
     #include <BLEClient.h>
@@ -100,6 +103,8 @@ uint32_t scenStart = 0;
 #include "Scenario.h"       // SCENARIO[], advanceScenario
 #include "SimLoop.h"        // doSimLoop — SIMULATION and DEMO builds only
 #include "OBD2.h"           // BLE OBD2, AppState, doScanning/doRunning — production only
+#include "Recorder.h"       // startRecording, stopRecording, tickRecording, drawRecordingScreen
+#include "WifiExport.h"     // startWifiExport, stopWifiExport, tickWifiExport, drawExportScreen
 
 // ── Setup ─────────────────────────────────────────────────────────────────
 void setup() {
@@ -167,46 +172,57 @@ void loop() {
   uint32_t now = millis();
   readEncoder();
 
-  // Menu overlay — takes priority over everything else
+  // Menu overlays — highest priority
   if (menuState == MENU_MAIN)     { drawMainMenu();     return; }
   if (menuState == MENU_SETTINGS) { drawSettingsMenu(); return; }
   if (menuState == MENU_EDIT)     { drawSettingsEdit(); return; }
 
-  if (!systemOn) {
-    display.clearBuffer();
-    display.sendBuffer();
-    return;
-  }
+  if (!systemOn) { display.clearBuffer(); display.sendBuffer(); return; }
 
 #if defined(SIMULATION) || defined(DEMO)
+  // SIMULATION: no Recorder/WifiExport; DEMO: both available
+  #if !defined(SIMULATION)
+  if (menuState == MENU_EXPORT) { tickWifiExport(); drawExportScreen(now); return; }
+  tickRecording(now);
+  #endif
   doSimLoop(now);
+  #if !defined(SIMULATION)
+  if (menuState == MENU_RECORDING) drawRecordingScreen(now);
+  #endif
 
 #else
+  // Export mode: pause OBD2 entirely to avoid BLE + WiFi radio conflict
+  if (menuState == MENU_EXPORT) { tickWifiExport(); drawExportScreen(now); return; }
+
+  tickRecording(now);  // write CSV row if recording active (no-op otherwise)
+
   // Production: demo mode uses the built-in scenario without OBD2
   if (demoMode) {
     advanceScenario();
     checkTurbo(now);
-    if (now - lastDrawMs >= 50) { drawDisplay(); lastDrawMs = now; }
-    return;
-  }
-
-  // LED: fast blink during Turbo, solid on connect fail, slow blink while scanning
-  if (now < turboUntilMs) {
-    digitalWrite(PIN_LED, (now / 100) % 2 == 0 ? HIGH : LOW);
-  } else if (appState == RUNNING) {
-    digitalWrite(PIN_LED, LOW);
-  } else if (connectFailed) {
-    digitalWrite(PIN_LED, HIGH);
+    if (now - lastDrawMs >= 50 && menuState == MENU_CLOSED) { drawDisplay(); lastDrawMs = now; }
   } else {
-    digitalWrite(PIN_LED, (now / 500) % 2 == 0 ? HIGH : LOW);
+    // LED: fast blink during Turbo, solid on connect fail, slow blink while scanning
+    if (now < turboUntilMs) {
+      digitalWrite(PIN_LED, (now / 100) % 2 == 0 ? HIGH : LOW);
+    } else if (appState == RUNNING) {
+      digitalWrite(PIN_LED, LOW);
+    } else if (connectFailed) {
+      digitalWrite(PIN_LED, HIGH);
+    } else {
+      digitalWrite(PIN_LED, (now / 500) % 2 == 0 ? HIGH : LOW);
+    }
+
+    switch (appState) {
+      case SCANNING:   doScanning();   break;
+      case CONNECTING: doConnecting(); break;
+      case INIT_ELM:   doInitElm();    break;
+      case RUNNING:    doRunning();    break;
+      case NO_OBD:     doNoObd();      break;
+    }
   }
 
-  switch (appState) {
-    case SCANNING:   doScanning();   break;
-    case CONNECTING: doConnecting(); break;
-    case INIT_ELM:   doInitElm();    break;
-    case RUNNING:    doRunning();    break;
-    case NO_OBD:     doNoObd();      break;
-  }
+  // Recording screen overrides normal display (OBD2/demo draw calls are suppressed above)
+  if (menuState == MENU_RECORDING) drawRecordingScreen(now);
 #endif
 }

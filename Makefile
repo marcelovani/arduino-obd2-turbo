@@ -52,7 +52,7 @@ FQBN           := esp32:esp32:esp32doit-devkit-v1
 PORT ?= $(shell ls /dev/cu.usbserial-* /dev/cu.SLAB_USBtoUART* 2>/dev/null | head -1)
 
 .PHONY: build test test-unit test-emulator scenario emulator \
-        wokwi-setup wokwi-build deploy clean help
+        wokwi-setup wokwi-build deploy demo-upload clean help
 
 # ─── help ────────────────────────────────────────────────────────────────────
 help:
@@ -69,6 +69,7 @@ help:
 	@echo "  make wokwi-build      Compile Wokwi sketch for VS Code extension"
 	@echo "  make deploy           Compile + flash production firmware (real OBD2)"
 	@echo "  make deploy PORT=/dev/cu.usbserial-XXXX   (specify port manually)"
+	@echo "  make demo-upload      Compile + flash DEMO firmware (no OBD2 needed)"
 	@echo "  make clean            Remove venv and caches"
 	@echo ""
 
@@ -191,12 +192,18 @@ wokwi-build:
 	@echo "✓ Firmware ready: $(WOKWI_BUILD)/turbo.ino.bin"
 
 # ─── Production deploy: compile + flash to real ESP32 ────────────────────────
-# Compiles sketches/turbo/turbo.ino without any special flags (production mode)
-# and uploads to the connected ESP32.
+# Compiles sketches/turbo/turbo.ino in production mode (BLE OBD2 + DFPlayer +
+# LittleFS recorder + WiFi export) and uploads to the connected ESP32.
+#
+# Uses the "huge_app" partition scheme (3 MB app + 896 KB LittleFS) because
+# BLE + WiFi libraries together exceed the 1.25 MB default app partition.
 #
 # Usage:
 #   make deploy                              auto-detect port
 #   make deploy PORT=/dev/cu.usbserial-XXXX  specify port manually
+PROD_FLAGS := --build-property "build.partitions=huge_app" \
+              --build-property "upload.maximum_size=3145728"
+
 deploy:
 	@which $(ARDUINO_CLI) > /dev/null 2>&1 || \
 	    (echo "arduino-cli not found — run: make wokwi-setup" && exit 1)
@@ -205,16 +212,40 @@ deploy:
 	    echo "  make deploy PORT=/dev/cu.usbserial-XXXX"; \
 	    exit 1; \
 	fi
-	@echo "→ Compiling $(SKETCH)/turbo.ino (production mode)..."
+	@echo "→ Compiling + uploading $(SKETCH)/turbo.ino (production mode, huge_app partition)..."
 	$(ARDUINO_CLI) compile \
 	    --fqbn $(FQBN) \
-	    $(SKETCH)
-	@echo "→ Uploading to $(PORT)..."
-	$(ARDUINO_CLI) upload \
-	    --fqbn $(FQBN) \
+	    $(PROD_FLAGS) \
+	    --upload \
 	    --port $(PORT) \
 	    $(SKETCH)
 	@echo "✓ Deployed. Open Serial Monitor at 115200 baud."
+
+# ─── Demo upload: compile + flash with -DDEMO ────────────────────────────────
+# Runs the built-in 24 s driving scenario on real hardware (SPI OLED, DFPlayer,
+# speaker) without needing an OBD2 dongle. Useful for bench testing and for
+# replaying a captured log as a custom scenario.
+#
+# Usage:
+#   make demo-upload                              auto-detect port
+#   make demo-upload PORT=/dev/cu.usbserial-XXXX  specify port manually
+demo-upload:
+	@which $(ARDUINO_CLI) > /dev/null 2>&1 || \
+	    (echo "arduino-cli not found — run: make wokwi-setup" && exit 1)
+	@if [ -z "$(PORT)" ]; then \
+	    echo "ERROR: no ESP32 port found. Plug in USB and retry, or run:"; \
+	    echo "  make demo-upload PORT=/dev/cu.usbserial-XXXX"; \
+	    exit 1; \
+	fi
+	@echo "→ Compiling + uploading $(SKETCH)/turbo.ino (DEMO mode, huge_app partition)..."
+	$(ARDUINO_CLI) compile \
+	    --fqbn $(FQBN) \
+	    --build-property "compiler.cpp.extra_flags=-DDEMO" \
+	    $(PROD_FLAGS) \
+	    --upload \
+	    --port $(PORT) \
+	    $(SKETCH)
+	@echo "✓ Demo firmware deployed."
 
 # ─── clean ───────────────────────────────────────────────────────────────────
 clean:

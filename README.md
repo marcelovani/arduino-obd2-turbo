@@ -124,27 +124,146 @@ AND  RPM > 1500  AND  gear <= 2
 → play /mp3/0001.mp3
 ```
 
-All thresholds are constants at the top of the sketch — tune them after
-your first real-car test.
+All thresholds are tunable via the **Settings** menu on the device — changes
+survive power cycles (stored in NVS flash).
+
+---
+
+## Recording OBD2 data
+
+The device can record live OBD2 data to its internal flash memory so you can
+debug trigger issues without being in the car, and replay real-car data as a
+custom scenario.
+
+### How to record
+
+1. Connect to OBD2 as normal (wait for "OBD2 connected!" screen)
+2. Click the encoder to open the menu → select **Record**
+3. The screen switches to a full-screen recording view:
+   - `* REC` blinks every 500 ms (confirms recording is live)
+   - Sample count increments every 100 ms
+   - Current RPM and TPS shown in real time
+4. Drive normally — every 100 ms a CSV row is written to flash
+5. Click the encoder to **Stop & Save** — the file is flushed and you return
+   to the menu
+
+Each file is named `log_001.csv`, `log_002.csv`, … The counter persists across
+power cycles. The ~896 KB LittleFS partition holds roughly **37 minutes** of
+driving data.
+
+### How to export via WiFi
+
+After recording, park and export without any cables:
+
+1. Open the menu → select **Export**
+2. The device creates a WiFi access point:
+
+   | Setting  | Value          |
+   | -------- | -------------- |
+   | SSID     | `TurboESP32`   |
+   | Password | `turbo1234`    |
+   | URL      | `http://192.168.4.1` |
+
+3. Connect your phone or laptop to `TurboESP32`
+4. Open `http://192.168.4.1` in a browser — you'll see a list of all log files
+5. Click a file name to **download** it as a CSV
+6. Click **Delete** to remove a file from the device
+7. Click the encoder to stop the WiFi server and return to the menu
+
+> **Note:** OBD2 polling is paused while the WiFi server is active to avoid
+> radio conflicts between BLE and WiFi on the shared ESP32 antenna.
+
+### CSV format
+
+Each row is one OBD2 poll (100 ms cadence during driving):
+
+```csv
+ms,tps,rpm,speed,voltage,coolant
+8203,85.2,1520.0,2.0,12.35,-999.0
+8303,89.4,1680.0,4.0,12.35,-999.0
+...
+```
+
+| Column    | Unit | Notes                                      |
+| --------- | ---- | ------------------------------------------ |
+| `ms`      | ms   | `millis()` timestamp — relative to boot    |
+| `tps`     | %    | Throttle position (0–100)                  |
+| `rpm`     | RPM  | Engine RPM                                 |
+| `speed`   | km/h | Vehicle speed (SAE J1979 PID 0x0D)         |
+| `voltage` | V    | Battery voltage (ATRV)                     |
+| `coolant` | °C   | Coolant temperature; −999 = not yet read   |
+
+### Replaying a recording as a custom scenario
+
+A recorded CSV can be fed back into the Python test suite to check exactly
+when (or why) the trigger fires — or doesn't fire:
+
+```bash
+# Run the visual scenario monitor against a real recording
+.venv/bin/python tests/visual_monitor.py --csv path/to/log_001.csv
+
+# Or replay with tuned thresholds to find the right settings
+.venv/bin/python tests/visual_monitor.py --csv log_001.csv \
+    --throttle-high 35 --throttle-low 8 --rpm-min 1200
+```
+
+To use a recording as a permanent built-in scenario, convert it to a
+`DataPoint` array and paste it into [Scenario.h](sketches/turbo/Scenario.h):
+
+```python
+import csv, sys
+rows = list(csv.DictReader(open(sys.argv[1])))
+t0 = int(rows[0]['ms'])
+for r in rows:
+    print(f"  {{ {int(r['ms'])-t0:6d}, {float(r['tps']):5.1f}, "
+          f"{float(r['rpm']):7.1f}, {float(r['speed']):5.1f} }},")
+```
+
+Run as `python convert.py log_001.csv` and paste the output into the
+`SCENARIO[]` array in `Scenario.h`.
 
 ---
 
 ## Software
 
-### Sketch
+### Sketch structure
 
-`sketches/turbo/turbo.ino` — single source file with three build modes
-selected by compile-time flags:
+The sketch is split into one `.h` file per responsibility, all included
+into the slim entry point `turbo.ino`:
 
-| Flag           | Command            | Hardware                                   | OBD2                 | Audio              | Scenario                  |
-| -------------- | ------------------ | ------------------------------------------ | -------------------- | ------------------ | ------------------------- |
-| `-DSIMULATION` | `make wokwi-build` | Wokwi (I2C OLED, buzzer GPIO17, LED GPIO4) | No                   | 900 Hz buzzer beep | Built-in 24 s loop (auto) |
-| `-DDEMO`       | `make demo-upload` | Real ESP32 (SPI OLED, DFPlayer, speaker)   | No                   | MP3 via DFPlayer   | Built-in 24 s loop (auto) |
-| _(none)_       | `make deploy`      | Real ESP32                                 | Yes — BLE OBD dongle | MP3 via DFPlayer   | Live OBD2 data            |
+| File              | Responsibility                                          |
+| ----------------- | ------------------------------------------------------- |
+| `Config.h`        | All `#define` constants — pins, audio tracks, thresholds |
+| `Settings.h`      | Runtime cfg* variables, NVS load/save/reset             |
+| `GearEstimator.h` | `estimateGear(rpm, speed)`                              |
+| `Audio.h`         | DFPlayer object + `dfplayerVoice()`                     |
+| `Display.h`       | U8g2 object, `showMessage()`, `drawDisplay()`           |
+| `Menu.h`          | Menu state machine — state, render, execute             |
+| `Encoder.h`       | ISR, button debounce, `readEncoder()`                   |
+| `TurboTrigger.h`  | `checkTurbo()` — all 5 trigger conditions               |
+| `Scenario.h`      | Demo drive cycle data + linear-interpolation playback   |
+| `SimLoop.h`       | `doSimLoop()` — simulation phase state machine          |
+| `OBD2.h`          | BLE transport, ELM327 init, live OBD2 polling           |
+| `Recorder.h`      | LittleFS CSV recorder (real + DEMO builds)              |
+| `WifiExport.h`    | WiFi AP + HTTP file server (real + DEMO builds)         |
+
+### Build modes
+
+Three build targets selected by compile-time flags:
+
+| Flag           | Command              | Hardware                                   | OBD2                 | Audio              | Record/Export |
+| -------------- | -------------------- | ------------------------------------------ | -------------------- | ------------------ | ------------- |
+| `-DSIMULATION` | `make wokwi-build`   | Wokwi (I2C OLED, buzzer GPIO17, LED GPIO4) | No                   | 900 Hz buzzer beep | No            |
+| `-DDEMO`       | `make demo-upload`   | Real ESP32 (SPI OLED, DFPlayer, speaker)   | No                   | MP3 via DFPlayer   | Yes           |
+| _(none)_       | `make deploy`        | Real ESP32                                 | Yes — BLE OBD dongle | MP3 via DFPlayer   | Yes           |
 
 The built-in scenario fires two Turbo triggers per loop: one during a
 1st→2nd gear change at ~9.5 s and one during a 2nd→3rd gear change at ~12.5 s.
-Encoder button resets the counter (simulation) or restarts the scenario (demo).
+
+> **Partition scheme:** production and DEMO builds use the `huge_app` partition
+> (3 MB app + 896 KB LittleFS). BLE + WiFi libraries together exceed the default
+> 1.25 MB app partition, so `make deploy` and `make demo-upload` pass
+> `--build-property "build.partitions=huge_app"` automatically.
 
 ### Arduino IDE (for flashing to the real device)
 

@@ -1,16 +1,32 @@
 // Menu.h — Menu state machine: state variables, rendering, and execution.
 //
 // States:
-//   CLOSED   — normal operation, encoder rotates display views
-//   MAIN     — top-level: Power, Demo, Settings, Exit
-//   SETTINGS — settings list: CFG_DEFS entries + Back + Factory Reset
-//   EDIT     — adjusting one value with the encoder (confirm with click)
+//   CLOSED    — normal operation, encoder rotates display views
+//   MAIN      — top-level: Power, Demo, Record*, Export*, Settings, Exit
+//   SETTINGS  — settings list: CFG_DEFS entries + Back + Factory Reset
+//   EDIT      — adjusting one value with the encoder (confirm with click)
+//   RECORDING — full-screen recording view; button stops and saves
+//   EXPORT    — full-screen WiFi export; button stops server
+//
+// * Record and Export are hidden in SIMULATION builds (no LittleFS / WiFi).
 
-enum MenuState { MENU_CLOSED, MENU_MAIN, MENU_SETTINGS, MENU_EDIT };
+enum MenuState { MENU_CLOSED, MENU_MAIN, MENU_SETTINGS, MENU_EDIT,
+                 MENU_RECORDING, MENU_EXPORT };
 MenuState menuState = MENU_CLOSED;
-int       mainSel   = 0;   // selected item in main menu (0–3)
-int       settSel   = 0;   // selected item in settings list (0..NUM_CFG_DEFS+1)
-#define   NUM_MAIN_ITEMS  4
+int       mainSel   = 0;
+int       settSel   = 0;
+
+#ifdef SIMULATION
+  #define NUM_MAIN_ITEMS 4   // Power, Demo, Settings, Exit
+#else
+  #define NUM_MAIN_ITEMS 6   // + Record, Export
+#endif
+
+// Forward declarations for functions defined in later-included modules.
+#if !defined(SIMULATION)
+void startRecording();
+void startWifiExport();
+#endif
 
 // ── Rendering ─────────────────────────────────────────────────────────────
 
@@ -18,25 +34,36 @@ void drawMainMenu() {
   char items[NUM_MAIN_ITEMS][24];
   snprintf(items[0], sizeof(items[0]), "Power %s", systemOn ? "OFF" : "ON");
   snprintf(items[1], sizeof(items[1]), "Demo  %s", demoMode ? "OFF" : "ON");
-  strncpy (items[2], "Settings >", sizeof(items[2]));
-  strncpy (items[3], "Exit",       sizeof(items[3]));
+#ifdef SIMULATION
+  strncpy(items[2], "Settings >", sizeof(items[2]));
+  strncpy(items[3], "Exit",       sizeof(items[3]));
+#else
+  strncpy(items[2], "Record",     sizeof(items[2]));
+  strncpy(items[3], "Export",     sizeof(items[3]));
+  strncpy(items[4], "Settings >", sizeof(items[4]));
+  strncpy(items[5], "Exit",       sizeof(items[5]));
+#endif
+
+  // Scrolling window: show 4 items at a time, track selected item.
+  int start = constrain(mainSel - 1, 0, NUM_MAIN_ITEMS - 4);
 
   display.clearBuffer();
   display.setFont(u8g2_font_ncenB08_tr);
-  display.drawStr(34, 11, "SETTINGS");
+  display.drawStr(40, 11, "MENU");
   display.drawHLine(0, 13, 128);
 
-  for (int i = 0; i < NUM_MAIN_ITEMS; i++) {
-    int y = 26 + i * 12;
-    if (i == mainSel) { display.drawBox(0, y - 9, 128, 11); display.setDrawColor(0); }
-    display.drawStr(4, y, items[i]);
-    if (i == mainSel) display.setDrawColor(1);
+  for (int i = 0; i < 4 && (start + i) < NUM_MAIN_ITEMS; i++) {
+    int idx = start + i;
+    int y   = 26 + i * 12;
+    if (idx == mainSel) { display.drawBox(0, y - 9, 128, 11); display.setDrawColor(0); }
+    display.drawStr(4, y, items[idx]);
+    if (idx == mainSel) display.setDrawColor(1);
   }
   display.sendBuffer();
 }
 
 void drawSettingsMenu() {
-  int total = NUM_CFG_DEFS + 2;  // +1 for Back, +1 for Factory Reset
+  int total = NUM_CFG_DEFS + 2;  // +1 Back, +1 Factory Reset
   int start = constrain(settSel - 1, 0, total - 3);
 
   display.clearBuffer();
@@ -117,13 +144,31 @@ void execMainMenu() {
 #endif
       }
       break;
-    case 2:  // Settings submenu
+#ifdef SIMULATION
+    case 2:  // Settings (SIMULATION — no Record/Export)
       menuState = MENU_SETTINGS;
       settSel   = 0;
       break;
     case 3:  // Exit
       menuState = MENU_CLOSED;
       break;
+#else
+    case 2:  // Record
+      startRecording();
+      menuState = MENU_RECORDING;
+      break;
+    case 3:  // Export
+      startWifiExport();
+      menuState = MENU_EXPORT;
+      break;
+    case 4:  // Settings
+      menuState = MENU_SETTINGS;
+      settSel   = 0;
+      break;
+    case 5:  // Exit
+      menuState = MENU_CLOSED;
+      break;
+#endif
   }
 }
 

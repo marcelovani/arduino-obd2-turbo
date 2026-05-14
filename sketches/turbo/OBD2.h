@@ -132,7 +132,7 @@ void doScanning() {
 
 void doNoObd() {
   uint32_t now = millis();
-  if (now - lastDrawMs >= 200) {
+  if (now - lastDrawMs >= 200 && menuState == MENU_CLOSED) {
     display.clearBuffer();
     display.setFont(u8g2_font_ncenB10_tr);
     display.drawStr(0, 28, "No OBD2");
@@ -246,7 +246,7 @@ void doRunning() {
       r = obdSend("010C");       v = parsePID(r, 2, 0.25f); if (v >= 0) metricRPM     = v;
       lastIdlePollMs = now;
     }
-    if (now - lastDrawMs >= 200) { drawParked(targetName.c_str()); lastDrawMs = now; }
+    if (now - lastDrawMs >= 200 && menuState == MENU_CLOSED) { drawParked(targetName.c_str()); lastDrawMs = now; }
 
   } else if (metricRPM < ENGINE_DRIVING_RPM) {
     // Engine idle, not moving — poll RPM only every 500 ms
@@ -255,7 +255,7 @@ void doRunning() {
       r = obdSend("010C"); v = parsePID(r, 2, 0.25f); if (v >= 0) metricRPM = v;
       lastPollMs = now;
     }
-    if (now - lastDrawMs >= 50) { drawDisplay(); lastDrawMs = now; }
+    if (now - lastDrawMs >= 50 && menuState == MENU_CLOSED) { drawDisplay(); lastDrawMs = now; }
 
   } else {
     // Driving — poll TPS + speed + RPM every 100 ms, then check for Turbo
@@ -267,7 +267,7 @@ void doRunning() {
       checkTurbo(now);
       lastPollMs = now;
     }
-    if (now - lastDrawMs >= 50) { drawDisplay(); lastDrawMs = now; }
+    if (now - lastDrawMs >= 50 && menuState == MENU_CLOSED) { drawDisplay(); lastDrawMs = now; }
   }
 }
 
