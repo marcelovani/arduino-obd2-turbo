@@ -55,7 +55,7 @@ void startRecording() {
   String fname = nextLogFilename();
   recFile = LittleFS.open(fname, "w");
   if (!recFile) return;
-  recFile.println("ms,tps,rpm,speed,voltage,coolant");
+  recFile.println("ms,tps,rpm,speed");
   recActive      = true;
   recSampleCount = 0;
   lastRecMs      = millis();
@@ -70,9 +70,9 @@ void tickRecording(uint32_t now) {
   if (!recActive) return;
   if (now - lastRecMs < 100) return;
   lastRecMs = now;
-  char buf[72];
-  snprintf(buf, sizeof(buf), "%lu,%.1f,%.1f,%.1f,%.2f,%.1f",
-    (unsigned long)now, metricTPS, metricRPM, metricSpeed, metricVoltage, metricCoolant);
+  char buf[48];
+  snprintf(buf, sizeof(buf), "%lu,%.1f,%.1f,%.1f",
+    (unsigned long)now, metricTPS, metricRPM, metricSpeed);
   recFile.println(buf);
   recSampleCount++;
 }

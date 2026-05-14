@@ -238,7 +238,7 @@ void doRunning() {
   bool encActive = (now - lastEncActiveMs < ENCODER_PRIORITY_MS);
 
   if (metricRPM < ENGINE_IDLE_RPM) {
-    // Engine off — poll battery, coolant, RPM every 3 s
+    // Standby screen only — battery voltage and coolant are NEVER polled elsewhere.
     if (!encActive && now - lastIdlePollMs >= 3000) {
       String r; float v;
       r = obdSend("ATRV", 1500); v = parseVoltage(r);       if (v > 0)  metricVoltage = v;
@@ -249,7 +249,7 @@ void doRunning() {
     if (now - lastDrawMs >= 200 && menuState == MENU_CLOSED) { drawParked(targetName.c_str()); lastDrawMs = now; }
 
   } else if (metricRPM < ENGINE_DRIVING_RPM) {
-    // Engine idle, not moving — poll RPM only every 500 ms
+    // Idle — RPM only, every 500 ms
     if (!encActive && now - lastPollMs >= 500) {
       String r; float v;
       r = obdSend("010C"); v = parsePID(r, 2, 0.25f); if (v >= 0) metricRPM = v;
@@ -258,7 +258,7 @@ void doRunning() {
     if (now - lastDrawMs >= 50 && menuState == MENU_CLOSED) { drawDisplay(); lastDrawMs = now; }
 
   } else {
-    // Driving — poll TPS + speed + RPM every 100 ms, then check for Turbo
+    // Driving — TPS + speed + RPM every 100 ms, then check for Turbo
     if (!encActive && now - lastPollMs >= 100) {
       String r; float v;
       r = obdSend("0111"); v = parsePID(r, 1, 100.0f / 255.0f); if (v >= 0) metricTPS   = v;

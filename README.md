@@ -158,10 +158,10 @@ After recording, park and export without any cables:
 1. Open the menu → select **Export**
 2. The device creates a WiFi access point:
 
-   | Setting  | Value          |
-   | -------- | -------------- |
-   | SSID     | `TurboESP32`   |
-   | Password | `turbo1234`    |
+   | Setting  | Value                |
+   | -------- | -------------------- |
+   | SSID     | `TurboESP32`         |
+   | Password | `turbo1234`          |
    | URL      | `http://192.168.4.1` |
 
 3. Connect your phone or laptop to `TurboESP32`
@@ -178,20 +178,21 @@ After recording, park and export without any cables:
 Each row is one OBD2 poll (100 ms cadence during driving):
 
 ```csv
-ms,tps,rpm,speed,voltage,coolant
-8203,85.2,1520.0,2.0,12.35,-999.0
-8303,89.4,1680.0,4.0,12.35,-999.0
+ms,tps,rpm,speed
+8203,85.2,1520.0,2.0
+8303,89.4,1680.0,4.0
 ...
 ```
 
-| Column    | Unit | Notes                                      |
-| --------- | ---- | ------------------------------------------ |
-| `ms`      | ms   | `millis()` timestamp — relative to boot    |
-| `tps`     | %    | Throttle position (0–100)                  |
-| `rpm`     | RPM  | Engine RPM                                 |
-| `speed`   | km/h | Vehicle speed (SAE J1979 PID 0x0D)         |
-| `voltage` | V    | Battery voltage (ATRV)                     |
-| `coolant` | °C   | Coolant temperature; −999 = not yet read   |
+| Column  | Unit | Notes                                   |
+| ------- | ---- | --------------------------------------- |
+| `ms`    | ms   | `millis()` timestamp — relative to boot |
+| `tps`   | %    | Throttle position (0–100)               |
+| `rpm`   | RPM  | Engine RPM                              |
+| `speed` | km/h | Vehicle speed (SAE J1979 PID 0x0D)      |
+
+> Battery voltage and coolant temperature are polled **only on the standby
+> screen** (engine off, RPM < 200) and are not included in the recording.
 
 ### Replaying a recording as a custom scenario
 
@@ -231,31 +232,31 @@ Run as `python convert.py log_001.csv` and paste the output into the
 The sketch is split into one `.h` file per responsibility, all included
 into the slim entry point `turbo.ino`:
 
-| File              | Responsibility                                          |
-| ----------------- | ------------------------------------------------------- |
+| File              | Responsibility                                           |
+| ----------------- | -------------------------------------------------------- |
 | `Config.h`        | All `#define` constants — pins, audio tracks, thresholds |
-| `Settings.h`      | Runtime cfg* variables, NVS load/save/reset             |
-| `GearEstimator.h` | `estimateGear(rpm, speed)`                              |
-| `Audio.h`         | DFPlayer object + `dfplayerVoice()`                     |
-| `Display.h`       | U8g2 object, `showMessage()`, `drawDisplay()`           |
-| `Menu.h`          | Menu state machine — state, render, execute             |
-| `Encoder.h`       | ISR, button debounce, `readEncoder()`                   |
-| `TurboTrigger.h`  | `checkTurbo()` — all 5 trigger conditions               |
-| `Scenario.h`      | Demo drive cycle data + linear-interpolation playback   |
-| `SimLoop.h`       | `doSimLoop()` — simulation phase state machine          |
-| `OBD2.h`          | BLE transport, ELM327 init, live OBD2 polling           |
-| `Recorder.h`      | LittleFS CSV recorder (real + DEMO builds)              |
-| `WifiExport.h`    | WiFi AP + HTTP file server (real + DEMO builds)         |
+| `Settings.h`      | Runtime cfg\* variables, NVS load/save/reset             |
+| `GearEstimator.h` | `estimateGear(rpm, speed)`                               |
+| `Audio.h`         | DFPlayer object + `dfplayerVoice()`                      |
+| `Display.h`       | U8g2 object, `showMessage()`, `drawDisplay()`            |
+| `Menu.h`          | Menu state machine — state, render, execute              |
+| `Encoder.h`       | ISR, button debounce, `readEncoder()`                    |
+| `TurboTrigger.h`  | `checkTurbo()` — all 5 trigger conditions                |
+| `Scenario.h`      | Demo drive cycle data + linear-interpolation playback    |
+| `SimLoop.h`       | `doSimLoop()` — simulation phase state machine           |
+| `OBD2.h`          | BLE transport, ELM327 init, live OBD2 polling            |
+| `Recorder.h`      | LittleFS CSV recorder (real + DEMO builds)               |
+| `WifiExport.h`    | WiFi AP + HTTP file server (real + DEMO builds)          |
 
 ### Build modes
 
 Three build targets selected by compile-time flags:
 
-| Flag           | Command              | Hardware                                   | OBD2                 | Audio              | Record/Export |
-| -------------- | -------------------- | ------------------------------------------ | -------------------- | ------------------ | ------------- |
-| `-DSIMULATION` | `make wokwi-build`   | Wokwi (I2C OLED, buzzer GPIO17, LED GPIO4) | No                   | 900 Hz buzzer beep | No            |
-| `-DDEMO`       | `make demo-upload`   | Real ESP32 (SPI OLED, DFPlayer, speaker)   | No                   | MP3 via DFPlayer   | Yes           |
-| _(none)_       | `make deploy`        | Real ESP32                                 | Yes — BLE OBD dongle | MP3 via DFPlayer   | Yes           |
+| Flag           | Command            | Hardware                                   | OBD2                 | Audio              | Record/Export |
+| -------------- | ------------------ | ------------------------------------------ | -------------------- | ------------------ | ------------- |
+| `-DSIMULATION` | `make wokwi-build` | Wokwi (I2C OLED, buzzer GPIO17, LED GPIO4) | No                   | 900 Hz buzzer beep | No            |
+| `-DDEMO`       | `make demo-upload` | Real ESP32 (SPI OLED, DFPlayer, speaker)   | No                   | MP3 via DFPlayer   | Yes           |
+| _(none)_       | `make deploy`      | Real ESP32                                 | Yes — BLE OBD dongle | MP3 via DFPlayer   | Yes           |
 
 The built-in scenario fires two Turbo triggers per loop: one during a
 1st→2nd gear change at ~9.5 s and one during a 2nd→3rd gear change at ~12.5 s.
