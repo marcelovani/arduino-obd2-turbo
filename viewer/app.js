@@ -1,5 +1,8 @@
 let chart = null;
 
+const toMph = (kmh) => (kmh * 0.621371).toFixed(0);
+const fmtSpeed = (kmh) => `${(+kmh).toFixed(0)} km/h (${toMph(kmh)} mph)`;
+
 async function loadFiles() {
   const files = await fetch("/api/files").then((r) => r.json());
   const list = document.getElementById("file-list");
@@ -30,7 +33,7 @@ async function loadFile(filename, el) {
   const dur = data.time.length ? data.time[data.time.length - 1].toFixed(1) : 0;
   const maxTPS = Math.max(...data.tps).toFixed(1);
   const maxRPM = Math.max(...data.rpm).toFixed(0);
-  const maxSpeed = Math.max(...data.speed).toFixed(0);
+  const maxSpeed = Math.max(...data.speed);
   const sprays = data.triggers.length;
   const s = data.settings;
   const src =
@@ -39,9 +42,9 @@ async function loadFile(filename, el) {
       : "default settings (old recording)";
 
   document.getElementById("stats").textContent =
-    `${data.time.length} samples · ${dur}s · peak TPS ${maxTPS}% · peak RPM ${maxRPM} · peak speed ${maxSpeed} km/h · ${sprays} spray${sprays !== 1 ? "s" : ""}`;
+    `${data.time.length} samples · ${dur}s · peak TPS ${maxTPS}% · peak RPM ${maxRPM} · peak speed ${fmtSpeed(maxSpeed)} · ${sprays} spray${sprays !== 1 ? "s" : ""}`;
   document.getElementById("settings-info").textContent =
-    `Trigger thresholds (${src}): TPS ${s.throttle_high}%→${s.throttle_low}%  RPM>${s.rpm_min}  gear ${s.min_gear}–${s.max_gear}  spd12=${s.speed12}  spd23=${s.speed23}`;
+    `Trigger thresholds (${src}): TPS ${s.throttle_high}%→${s.throttle_low}%  RPM>${s.rpm_min}  gear ${s.min_gear}–${s.max_gear}  spd12=${fmtSpeed(s.speed12)}  spd23=${fmtSpeed(s.speed23)}`;
 
   document.getElementById("empty").style.display = "none";
   document.getElementById("chart-wrap").style.display = "block";
@@ -121,7 +124,7 @@ function renderChart(data) {
           tension: 0.15,
         },
         {
-          label: "Speed (km/h)",
+          label: "Speed (km/h · mph)",
           data: toPoints(data.speed),
           borderColor: "#5c9eff",
           backgroundColor: "transparent",
@@ -150,6 +153,13 @@ function renderChart(data) {
           bodyFont: { family: "Courier New" },
           callbacks: {
             title: (items) => `t = ${items[0].parsed.x.toFixed(2)}s`,
+            label: (item) => {
+              if (item.dataset.yAxisID === "speed") {
+                const kmh = item.parsed.y;
+                return ` Speed: ${kmh.toFixed(0)} km/h (${toMph(kmh)} mph)`;
+              }
+              return null;
+            },
           },
         },
         annotation: {
@@ -198,7 +208,11 @@ function renderChart(data) {
         speed: {
           type: "linear",
           position: "right",
-          title: { display: true, text: "Speed (km/h)", color: "#5c9eff" },
+          title: {
+            display: true,
+            text: "Speed (km/h · mph)",
+            color: "#5c9eff",
+          },
           ticks: { color: "#5c9eff", font: { size: 11 } },
           grid: { drawOnChartArea: false },
           min: 0,
