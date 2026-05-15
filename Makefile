@@ -13,6 +13,7 @@
 #   make wokwi-setup      Install arduino-cli + ESP32 board + libraries (once)
 #   make wokwi-build      Compile Wokwi simulation sketch → firmware .bin/.elf
 #   make deploy           Compile + flash production firmware to real ESP32
+#   make viewer           Start the recording viewer web app (http://localhost:8080)
 #   make clean            Remove virtual environment and caches
 #
 # Quick start:
@@ -52,7 +53,7 @@ FQBN           := esp32:esp32:esp32doit-devkit-v1
 PORT ?= $(shell ls /dev/cu.usbserial-* /dev/cu.SLAB_USBtoUART* 2>/dev/null | head -1)
 
 .PHONY: build test test-unit test-emulator scenario emulator \
-        wokwi-setup wokwi-build deploy demo-upload clean help
+        wokwi-setup wokwi-build deploy demo-upload clean help viewer
 
 # ─── help ────────────────────────────────────────────────────────────────────
 help:
@@ -70,6 +71,7 @@ help:
 	@echo "  make deploy           Compile + flash production firmware (real OBD2)"
 	@echo "  make deploy PORT=/dev/cu.usbserial-XXXX   (specify port manually)"
 	@echo "  make demo-upload      Compile + flash DEMO firmware (no OBD2 needed)"
+	@echo "  make viewer           Start recording viewer at http://localhost:8080"
 	@echo "  make clean            Remove venv and caches"
 	@echo ""
 
@@ -246,6 +248,11 @@ demo-upload:
 	    --port $(PORT) \
 	    $(SKETCH)
 	@echo "✓ Demo firmware deployed."
+
+# ─── recording viewer ────────────────────────────────────────────────────────
+viewer:
+	@echo "→ Starting recording viewer at http://localhost:8080 ..."
+	$(PYTHON) viewer/server.py
 
 # ─── clean ───────────────────────────────────────────────────────────────────
 clean:

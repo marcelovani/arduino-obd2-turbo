@@ -194,6 +194,27 @@ ms,tps,rpm,speed
 > Battery voltage and coolant temperature are polled **only on the standby
 > screen** (engine off, RPM < 200) and are not included in the recording.
 
+### Viewing recordings in the browser
+
+A simple web viewer lets you inspect any recording as an interactive chart.
+
+```bash
+make viewer
+```
+
+Then open **http://localhost:8080** in any browser.
+
+- The sidebar lists every `.csv` file in the `recordings/` folder — click one to load it
+- The chart shows TPS (green), RPM (red), and Speed (blue) over time in seconds
+- Each metric has its own Y-axis so all three lines are readable at their correct scale
+- Hover anywhere on the chart to see a crosshair with all three values at that moment
+- A stats bar shows sample count, total duration, and peak values for the file
+
+No extra dependencies — the server uses only Python's standard library and
+loads [Chart.js](https://www.chartjs.org/) from a CDN.
+
+---
+
 ### Replaying a recording as a custom scenario
 
 A recorded CSV can be fed back into the Python test suite to check exactly
