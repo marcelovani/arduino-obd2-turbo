@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Turbo Recording Viewer</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
+  </head>
+  <body>
+    <div id="sidebar">
+      <h2>Recordings</h2>
+      <div id="file-list"></div>
+    </div>
+    <div id="main">
+      <div id="toolbar">
+        <div id="title">Select a recording</div>
+        <button id="reset-zoom" onclick="resetZoom()">Reset zoom</button>
+      </div>
+      <div id="stats"></div>
+      <div id="settings-info"></div>
+      <div id="empty">← pick a file</div>
+      <div id="chart-wrap" style="display: none">
+        <canvas id="chart"></canvas>
+      </div>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>
