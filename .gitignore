@@ -6,4 +6,5 @@ tests/**/__pycache__
 **/*.pyc
 Emulators/Wokwi/build/
 sketches/turbo/build/
-recordings
+recordings/*
+!recordings/README.md
