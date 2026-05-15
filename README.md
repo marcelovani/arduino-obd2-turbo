@@ -8,6 +8,33 @@ turbo sound.
 The device also shows live gauges (throttle, RPM, speed, gear) on a
 small OLED screen.
 
+<p align="center">
+  <img src="images/breadboard.jpg" alt="Project assembled on a breadboard" width="720">
+  <br>
+  <em>The complete project assembled on a breadboard — ESP32, SSD1306 OLED, DFPlayer Mini, KY-040 rotary encoder, and speaker wired up and ready to plug into a car's OBD2 port.</em>
+</p>
+
+---
+
+## Quick start
+
+Python 3.x is required for the test suite, visual monitor, and recording viewer.
+
+```bash
+# 1. Install Python dependencies (creates .venv, installs pytest and friends)
+make build
+
+# 2. Verify everything works
+make test
+
+# 3. Start the recording viewer (no extra deps needed — uses Python stdlib)
+make viewer          # then open http://localhost:8080
+make stop-viewer     # stop it when done
+```
+
+For firmware: see [Wokwi simulation](#wokwi-simulation) (no hardware) or
+[`make deploy`](#arduino-cli-for-command-line-builds-and-wokwi-firmware) (real ESP32).
+
 ---
 
 ## How it works
@@ -209,9 +236,17 @@ Then open **http://localhost:8080** in any browser.
 - Each metric has its own Y-axis so all three lines are readable at their correct scale
 - Hover anywhere on the chart to see a crosshair with all three values at that moment
 - A stats bar shows sample count, total duration, and peak values for the file
+- Yellow markers show exactly when and for how long the Turbo sound fired, labelled by gear
+- Drag on the chart to zoom into any time range; scroll to pan; click Reset Zoom to go back
 
 No extra dependencies — the server uses only Python's standard library and
 loads [Chart.js](https://www.chartjs.org/) from a CDN.
+
+<p align="center">
+  <img src="images/viewer.jpg" alt="Recording viewer" width="720">
+  <br>
+  <em>The recording viewer running in a browser — TPS, RPM, and speed plotted on a single interactive chart with yellow markers showing each Turbo trigger event. Use it to verify trigger timing, tune thresholds, and replay real drives without being in the car.</em>
+</p>
 
 ---
 
@@ -352,6 +387,12 @@ Simulated hardware (replaces real-device peripherals under `#ifdef SIMULATION`):
 | KY-040 encoder | GPIO25/26/27    | Same as real device                                                   |
 | Passive buzzer | GPIO17 (TX2)    | Plays 900 Hz beep for 350 ms when Turbo fires (replaces DFPlayer MP3) |
 | Red LED        | GPIO4           | Blinks for 1 s after each Turbo fire (visual indicator)               |
+
+<p align="center">
+  <img src="images/wokwi%20emulator.jpg" alt="Wokwi simulation running in VS Code" width="720">
+  <br>
+  <em>The Wokwi circuit simulation running inside VS Code — the virtual OLED displays live gauges, the encoder can be turned to cycle views, and the buzzer fires whenever the built-in driving scenario triggers a Turbo event. No hardware required.</em>
+</p>
 
 **Option A — wokwi.com (browser, no compilation needed)**
 
