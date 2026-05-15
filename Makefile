@@ -13,7 +13,8 @@
 #   make wokwi-setup      Install arduino-cli + ESP32 board + libraries (once)
 #   make wokwi-build      Compile Wokwi simulation sketch → firmware .bin/.elf
 #   make deploy           Compile + flash production firmware to real ESP32
-#   make viewer           Start the recording viewer web app (http://localhost:8080)
+#   make viewer           Start recording viewer in background (http://localhost:8080)
+#   make stop-viewer      Stop the recording viewer
 #   make clean            Remove virtual environment and caches
 #
 # Quick start:
@@ -53,7 +54,7 @@ FQBN           := esp32:esp32:esp32doit-devkit-v1
 PORT ?= $(shell ls /dev/cu.usbserial-* /dev/cu.SLAB_USBtoUART* 2>/dev/null | head -1)
 
 .PHONY: build test test-unit test-emulator scenario emulator \
-        wokwi-setup wokwi-build deploy demo-upload clean help viewer
+        wokwi-setup wokwi-build deploy demo-upload clean help viewer stop-viewer
 
 # ─── help ────────────────────────────────────────────────────────────────────
 help:
@@ -71,7 +72,8 @@ help:
 	@echo "  make deploy           Compile + flash production firmware (real OBD2)"
 	@echo "  make deploy PORT=/dev/cu.usbserial-XXXX   (specify port manually)"
 	@echo "  make demo-upload      Compile + flash DEMO firmware (no OBD2 needed)"
-	@echo "  make viewer           Start recording viewer at http://localhost:8080"
+	@echo "  make viewer           Start recording viewer in background (http://localhost:8080)"
+	@echo "  make stop-viewer      Stop the recording viewer"
 	@echo "  make clean            Remove venv and caches"
 	@echo ""
 
@@ -250,9 +252,25 @@ demo-upload:
 	@echo "✓ Demo firmware deployed."
 
 # ─── recording viewer ────────────────────────────────────────────────────────
+VIEWER_PID := /tmp/turbo_viewer.pid
+
 viewer:
-	@echo "→ Starting recording viewer at http://localhost:8080 ..."
-	$(PYTHON) viewer/server.py
+	@if [ -f $(VIEWER_PID) ] && kill -0 $$(cat $(VIEWER_PID)) 2>/dev/null; then \
+	    echo "Viewer already running (PID $$(cat $(VIEWER_PID))) — open http://localhost:8080"; \
+	else \
+	    $(PYTHON) viewer/server.py & echo $$! > $(VIEWER_PID); \
+	    echo "→ Viewer started at http://localhost:8080 (PID $$(cat $(VIEWER_PID)))"; \
+	    echo "  Run 'make stop-viewer' to stop."; \
+	fi
+
+stop-viewer:
+	@if [ -f $(VIEWER_PID) ] && kill -0 $$(cat $(VIEWER_PID)) 2>/dev/null; then \
+	    kill $$(cat $(VIEWER_PID)) && rm -f $(VIEWER_PID); \
+	    echo "→ Viewer stopped."; \
+	else \
+	    echo "Viewer is not running."; \
+	    rm -f $(VIEWER_PID); \
+	fi
 
 # ─── clean ───────────────────────────────────────────────────────────────────
 clean:
