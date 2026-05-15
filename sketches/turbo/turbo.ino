@@ -56,6 +56,8 @@ float    metricCoolant = -999;  // °C, -999 = not yet read
 
 // Turbo trigger state — written by TurboTrigger; read by Display
 float    prevTPS      = 0;
+float    prevRPM      = 0;
+bool     fastRpmRise  = false;   // true if RPM jumped fast while throttle was high (free-revving)
 uint32_t lastTurboMs  = 0;
 uint32_t turboCount   = 0;
 uint32_t turboUntilMs = 0;

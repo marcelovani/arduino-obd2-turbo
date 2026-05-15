@@ -44,6 +44,13 @@
 #define TURBO_SPEED_GEAR12   50.0f   // km/h (31 mph) — below this → gear 1
 #define TURBO_SPEED_GEAR23   65.0f   // km/h (40 mph) — below this (and ≥ GEAR12) → gear 2
 
+// Maximum RPM rise per 100 ms poll while throttle is high before a trigger is
+// suppressed. A fast rise means the clutch is in and the engine is free-revving
+// (no load), not a real gear change. Under load, RPM rises ~50–300 RPM/poll;
+// free-revving can exceed 500–1000 RPM/poll.
+// Set to 0 to disable the check entirely (default — off).
+#define TURBO_RPM_RISE_MAX     0.0f  // RPM per poll — 0 = disabled; e.g. 500 to enable
+
 // ── Engine state thresholds ───────────────────────────────────────────────
 #define ENGINE_IDLE_RPM    200.0f    // below = engine off → parked screen
 #define ENGINE_DRIVING_RPM 1000.0f   // above = driving → poll TPS + speed + RPM

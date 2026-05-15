@@ -5,13 +5,15 @@
 // Changes take effect immediately when edited in the menu.
 // Saved to NVS on "< Back"; wiped and restored to defaults on "Factory Reset".
 
+enum SettingType { SETTING_FLOAT, SETTING_INT, SETTING_BOOL };
+
 struct SettingDef {
-  const char* label;
-  float*      val;
-  float       step;
-  float       vmin;
-  float       vmax;
-  bool        isInt;
+  const char*  label;
+  float*       val;
+  float        step;  // for BOOL: the "On" threshold value; for others: edit increment
+  float        vmin;
+  float        vmax;
+  SettingType  type;
 };
 
 // Initialised from compile-time defaults; changed at runtime via the Settings menu.
@@ -26,22 +28,25 @@ float cfgVolGear2     = (float)TURBO_VOLUME_GEAR2;
 float cfgSpeed12      = TURBO_SPEED_GEAR12;
 float cfgSpeed23      = TURBO_SPEED_GEAR23;
 float cfgVolVoice     = (float)TURBO_VOLUME_VOICE;
+float cfgRpmRiseMax   = TURBO_RPM_RISE_MAX;
 
 static SettingDef CFG_DEFS[] = {
   // Turbo trigger conditions (all must be true simultaneously):
-  {"TPS High %",  &cfgThrottleHigh,   5.0f,  10.0f, 100.0f, false}, // TPS must have been above this (hard push)
-  {"TPS Low  %",  &cfgThrottleLow,    1.0f,   0.0f,  50.0f, false}, // TPS must now be below this (lifted off)
-  {"RPM Min",     &cfgRpmMin,       100.0f, 500.0f, 6000.0f, true }, // engine must be spinning above this RPM
-  {"Min Gear",    &cfgMinGear,        1.0f,   1.0f,    6.0f, true }, // only trigger in this gear or higher
-  {"Max Gear",    &cfgMaxGear,        1.0f,   1.0f,    6.0f, true }, // only trigger in this gear or lower
-  {"Cooldown ms", &cfgCooldownMs,   100.0f, 500.0f,10000.0f, true }, // min time between two triggers (ms)
+  {"Throttle Hi%", &cfgThrottleHigh,   5.0f,  10.0f, 100.0f, SETTING_FLOAT}, // TPS must have been above this (hard push)
+  {"Throttle Lo%", &cfgThrottleLow,    1.0f,   0.0f,  50.0f, SETTING_FLOAT}, // TPS must now be below this (lifted off)
+  {"RPM Min",      &cfgRpmMin,       100.0f, 500.0f, 6000.0f, SETTING_INT  }, // engine must be spinning above this RPM
+  {"Min Gear",     &cfgMinGear,        1.0f,   1.0f,    6.0f, SETTING_INT  }, // only trigger in this gear or higher
+  {"Max Gear",     &cfgMaxGear,        1.0f,   1.0f,    6.0f, SETTING_INT  }, // only trigger in this gear or lower
+  {"Cooldown ms",  &cfgCooldownMs,   100.0f, 500.0f,10000.0f, SETTING_INT  }, // min time between two triggers (ms)
   // Audio volumes (DFPlayer scale 0–30):
-  {"Vol Gear 1",  &cfgVolGear1,       1.0f,   0.0f,   30.0f, true }, // spray volume for 1st gear change
-  {"Vol Gear 2",  &cfgVolGear2,       1.0f,   0.0f,   30.0f, true }, // spray volume for 2nd gear change
-  {"Vol Voice",   &cfgVolVoice,       1.0f,   0.0f,   30.0f, true }, // voice announcements volume
+  {"Vol Gear 1",   &cfgVolGear1,       1.0f,   0.0f,   30.0f, SETTING_INT  }, // spray volume for 1st gear change
+  {"Vol Gear 2",   &cfgVolGear2,       1.0f,   0.0f,   30.0f, SETTING_INT  }, // spray volume for 2nd gear change
+  {"Vol Voice",    &cfgVolVoice,       1.0f,   0.0f,   30.0f, SETTING_INT  }, // voice announcements volume
   // Gear estimation speed bands (km/h — OBD2 PID 010D is always km/h):
-  {"Spd G1/G2 km", &cfgSpeed12,       5.0f,   0.0f,  100.0f, true }, // speed below this = 1st gear
-  {"Spd G2/G3 km", &cfgSpeed23,       5.0f,   0.0f,  150.0f, true }, // speed below this (and ≥ G1/G2) = 2nd gear
+  {"Spd G1/G2 km", &cfgSpeed12,        5.0f,   0.0f,  100.0f, SETTING_INT  }, // speed below this = 1st gear
+  {"Spd G2/G3 km", &cfgSpeed23,        5.0f,   0.0f,  150.0f, SETTING_INT  }, // speed below this (and ≥ G1/G2) = 2nd gear
+  // Free-rev guard — suppresses trigger when RPM jumps fast (clutch in, no load):
+  {"Rev Guard",    &cfgRpmRiseMax,   500.0f,   0.0f, 2000.0f, SETTING_BOOL }, // On = 500 RPM/poll threshold; Off = 0
 };
 #define NUM_CFG_DEFS  (int)(sizeof(CFG_DEFS) / sizeof(CFG_DEFS[0]))
 
@@ -61,6 +66,7 @@ static void loadSettings() {
   cfgSpeed12      = prefs.getFloat("spd12",    cfgSpeed12);
   cfgSpeed23      = prefs.getFloat("spd23",    cfgSpeed23);
   cfgVolVoice     = prefs.getFloat("volVoice", cfgVolVoice);
+  cfgRpmRiseMax   = prefs.getFloat("rpmRise",  cfgRpmRiseMax);
   prefs.end();
 }
 
@@ -78,6 +84,7 @@ static void saveSettings() {
   prefs.putFloat("spd12",    cfgSpeed12);
   prefs.putFloat("spd23",    cfgSpeed23);
   prefs.putFloat("volVoice", cfgVolVoice);
+  prefs.putFloat("rpmRise",  cfgRpmRiseMax);
   prefs.end();
 }
 
@@ -97,5 +104,6 @@ static void resetSettings() {
   cfgSpeed12      = TURBO_SPEED_GEAR12;
   cfgSpeed23      = TURBO_SPEED_GEAR23;
   cfgVolVoice     = (float)TURBO_VOLUME_VOICE;
+  cfgRpmRiseMax   = TURBO_RPM_RISE_MAX;
 }
 #endif

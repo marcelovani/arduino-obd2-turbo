@@ -22,6 +22,7 @@ from turbo_logic import (  # noqa: F401 — re-exported for test imports
     TURBO_COOLDOWN_MS,
     TURBO_SPEED_GEAR12,
     TURBO_SPEED_GEAR23,
+    TURBO_RPM_RISE_MAX,
     parse_pid,
     estimate_gear,
     TurboTrigger,
@@ -43,19 +44,22 @@ class MenuController:
     MAIN_EXIT     = 3
     NUM_MAIN      = 4
 
-    # Settings: (label, attr_name, step, vmin, vmax)
+    # Settings: (label, attr_name, step, vmin, vmax, type)
+    # type is "float" | "int" | "bool"
+    # "bool": rotate() toggles between 0 (Off) and step (On threshold).
     CFG_DEFS = [
-        ("TPS High %",  "tps_high",    5.0,  10.0, 100.0),
-        ("TPS Low  %",  "tps_low",     1.0,   0.0,  50.0),
-        ("RPM Min",     "rpm_min",   100.0, 500.0, 6000.0),
-        ("Min Gear",    "min_gear",    1.0,   1.0,    6.0),
-        ("Max Gear",    "max_gear",    1.0,   1.0,    6.0),
-        ("Cooldown ms", "cooldown_ms",100.0, 500.0,10000.0),
-        ("Vol Gear 1",  "vol_gear1",   1.0,   0.0,   30.0),
-        ("Vol Gear 2",  "vol_gear2",   1.0,   0.0,   30.0),
-        ("Spd G1/G2 km", "spd12",      5.0,   0.0,  100.0),
-        ("Spd G2/G3 km", "spd23",      5.0,   0.0,  150.0),
-        ("Vol Voice",   "vol_voice",   1.0,   0.0,   30.0),
+        ("Throttle Hi%",  "tps_high",     5.0,  10.0, 100.0, "float"),
+        ("Throttle Lo%",  "tps_low",      1.0,   0.0,  50.0, "float"),
+        ("RPM Min",       "rpm_min",    100.0, 500.0, 6000.0, "int"),
+        ("Min Gear",      "min_gear",     1.0,   1.0,    6.0, "int"),
+        ("Max Gear",      "max_gear",     1.0,   1.0,    6.0, "int"),
+        ("Cooldown ms",   "cooldown_ms", 100.0, 500.0,10000.0, "int"),
+        ("Vol Gear 1",    "vol_gear1",    1.0,   0.0,   30.0, "int"),
+        ("Vol Gear 2",    "vol_gear2",    1.0,   0.0,   30.0, "int"),
+        ("Vol Voice",     "vol_voice",    1.0,   0.0,   30.0, "int"),
+        ("Spd G1/G2 km",  "spd12",        5.0,   0.0,  100.0, "int"),
+        ("Spd G2/G3 km",  "spd23",        5.0,   0.0,  150.0, "int"),
+        ("Rev Guard",     "rpm_rise_max", 500.0,  0.0, 2000.0, "bool"),
     ]
     NUM_SETTINGS = len(CFG_DEFS)   # Back is index NUM_SETTINGS
 
@@ -76,7 +80,8 @@ class MenuController:
         self.vol_gear2   = 27.0
         self.spd12       = TURBO_SPEED_GEAR12
         self.spd23       = TURBO_SPEED_GEAR23
-        self.vol_voice   = 13.0
+        self.vol_voice      = 13.0
+        self.rpm_rise_max   = TURBO_RPM_RISE_MAX
 
     def button_press(self):
         """Simulate one encoder button press."""
@@ -123,9 +128,13 @@ class MenuController:
             total = self.NUM_SETTINGS + 1   # +1 for Back
             self.settings_sel = (self.settings_sel + delta) % total
         elif self.menu_state == "edit":
-            _, attr, step, vmin, vmax = self.CFG_DEFS[self.settings_sel]
-            new_val = getattr(self, attr) + delta * step
-            setattr(self, attr, max(vmin, min(vmax, new_val)))
+            _, attr, step, vmin, vmax, stype = self.CFG_DEFS[self.settings_sel]
+            if stype == "bool":
+                cur = getattr(self, attr)
+                setattr(self, attr, 0.0 if cur > 0 else step)
+            else:
+                new_val = getattr(self, attr) + delta * step
+                setattr(self, attr, max(vmin, min(vmax, new_val)))
 
 
 class TurboTrigger:

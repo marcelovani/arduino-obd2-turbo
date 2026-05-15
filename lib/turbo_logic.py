@@ -31,6 +31,7 @@ _CONFIG_MAP = {
     'TURBO_COOLDOWN_MS':   ('TURBO_COOLDOWN_MS',    int),
     'TURBO_SPEED_GEAR12':  ('TURBO_SPEED_GEAR12',   float),
     'TURBO_SPEED_GEAR23':  ('TURBO_SPEED_GEAR23',   float),
+    'TURBO_RPM_RISE_MAX':  ('TURBO_RPM_RISE_MAX',   float),
 }
 
 # Hard fallback — used only if Config.h cannot be read.
@@ -43,6 +44,7 @@ _FALLBACK = {
     'TURBO_COOLDOWN_MS':   2000,
     'TURBO_SPEED_GEAR12':  50.0,
     'TURBO_SPEED_GEAR23':  65.0,
+    'TURBO_RPM_RISE_MAX':  0.0,
 }
 
 
@@ -70,6 +72,7 @@ TURBO_MAX_GEAR      = _cfg['TURBO_MAX_GEAR']
 TURBO_COOLDOWN_MS   = _cfg['TURBO_COOLDOWN_MS']
 TURBO_SPEED_GEAR12  = _cfg['TURBO_SPEED_GEAR12']
 TURBO_SPEED_GEAR23  = _cfg['TURBO_SPEED_GEAR23']
+TURBO_RPM_RISE_MAX  = _cfg['TURBO_RPM_RISE_MAX']
 
 
 def load_config_h_as_settings():
@@ -155,6 +158,7 @@ class TurboTrigger:
         cooldown_ms:   float = TURBO_COOLDOWN_MS,
         speed12:       float = TURBO_SPEED_GEAR12,
         speed23:       float = TURBO_SPEED_GEAR23,
+        rpm_rise_max:  float = TURBO_RPM_RISE_MAX,
     ):
         self.throttle_high = throttle_high
         self.throttle_low  = throttle_low
@@ -164,8 +168,11 @@ class TurboTrigger:
         self.cooldown_ms   = cooldown_ms
         self.speed12       = speed12
         self.speed23       = speed23
+        self.rpm_rise_max  = rpm_rise_max
 
         self._prev_tps      = 0.0
+        self._prev_rpm      = 0.0
+        self._fast_rpm_rise = False  # True if RPM jumped fast while throttle was high
         self._last_turbo_ms = -(cooldown_ms + 1)
         self.count          = 0
         self.events: list[dict] = []
@@ -173,12 +180,21 @@ class TurboTrigger:
     def update(self, tps: float, rpm: float, speed: float, now_ms: float) -> bool:
         """Process one poll cycle. Returns True if Turbo triggered."""
         gear = estimate_gear(rpm, speed, self.speed12, self.speed23)
+
+        # Accumulate free-rev flag: if RPM rose too fast while throttle was high,
+        # the clutch was probably in (no load) — suppress the trigger.
+        # rpm_rise_max == 0 disables the check entirely.
+        if self.rpm_rise_max > 0 and self._prev_tps > self.throttle_high:
+            if rpm - self._prev_rpm > self.rpm_rise_max:
+                self._fast_rpm_rise = True
+
         triggered = (
             now_ms - self._last_turbo_ms >= self.cooldown_ms
             and self._prev_tps > self.throttle_high
             and tps            < self.throttle_low
             and rpm            > self.rpm_min
             and self.min_gear <= gear <= self.max_gear
+            and (self.rpm_rise_max == 0 or not self._fast_rpm_rise)
         )
         if triggered:
             self._last_turbo_ms = now_ms
@@ -191,5 +207,11 @@ class TurboTrigger:
                 'speed':    speed,
                 'gear':     gear,
             })
+
+        # Reset free-rev flag once throttle drops — ready for the next press.
+        if tps < self.throttle_low:
+            self._fast_rpm_rise = False
+
+        self._prev_rpm = rpm
         self._prev_tps = tps
         return triggered

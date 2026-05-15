@@ -81,10 +81,16 @@ void drawSettingsMenu() {
     } else if (idx == NUM_CFG_DEFS + 1) {
       strncpy(buf, "Factory Reset", sizeof(buf));
     } else {
-      if (CFG_DEFS[idx].isInt)
-        snprintf(buf, sizeof(buf), "%-11s %4d", CFG_DEFS[idx].label, (int)*CFG_DEFS[idx].val);
-      else
-        snprintf(buf, sizeof(buf), "%-11s %4.0f", CFG_DEFS[idx].label, *CFG_DEFS[idx].val);
+      switch (CFG_DEFS[idx].type) {
+        case SETTING_BOOL:
+          snprintf(buf, sizeof(buf), "%-11s  %s", CFG_DEFS[idx].label, *CFG_DEFS[idx].val > 0 ? "On" : "Off");
+          break;
+        case SETTING_INT:
+          snprintf(buf, sizeof(buf), "%-11s %4d", CFG_DEFS[idx].label, (int)*CFG_DEFS[idx].val);
+          break;
+        default:
+          snprintf(buf, sizeof(buf), "%-11s %4.0f", CFG_DEFS[idx].label, *CFG_DEFS[idx].val);
+      }
     }
     if (idx == settSel) { display.drawBox(0, y - 10, 128, 12); display.setDrawColor(0); }
     display.drawStr(4, y, buf);
@@ -100,10 +106,16 @@ void drawSettingsEdit() {
   display.drawHLine(0, 13, 128);
 
   char valBuf[16];
-  if (CFG_DEFS[settSel].isInt)
-    snprintf(valBuf, sizeof(valBuf), "%d", (int)*CFG_DEFS[settSel].val);
-  else
-    snprintf(valBuf, sizeof(valBuf), "%.0f", *CFG_DEFS[settSel].val);
+  switch (CFG_DEFS[settSel].type) {
+    case SETTING_BOOL:
+      strncpy(valBuf, *CFG_DEFS[settSel].val > 0 ? "On" : "Off", sizeof(valBuf));
+      break;
+    case SETTING_INT:
+      snprintf(valBuf, sizeof(valBuf), "%d", (int)*CFG_DEFS[settSel].val);
+      break;
+    default:
+      snprintf(valBuf, sizeof(valBuf), "%.0f", *CFG_DEFS[settSel].val);
+  }
 
   display.setFont(u8g2_font_ncenB10_tr);
   int w = display.getStrWidth(valBuf);

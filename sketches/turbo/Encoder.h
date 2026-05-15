@@ -51,8 +51,11 @@ void applyDelta(int delta) {
     settSel = (settSel + delta % total + total) % total;
   } else if (menuState == MENU_EDIT) {
     float* v = CFG_DEFS[settSel].val;
-    *v = constrain(*v + delta * CFG_DEFS[settSel].step,
-                   CFG_DEFS[settSel].vmin, CFG_DEFS[settSel].vmax);
+    if (CFG_DEFS[settSel].type == SETTING_BOOL)
+      *v = (*v == 0.0f) ? CFG_DEFS[settSel].step : 0.0f;
+    else
+      *v = constrain(*v + delta * CFG_DEFS[settSel].step,
+                     CFG_DEFS[settSel].vmin, CFG_DEFS[settSel].vmax);
   } else if (menuState == MENU_RECORDING || menuState == MENU_EXPORT) {
     // no rotation in recording or export modes
   } else {

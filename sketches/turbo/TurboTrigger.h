@@ -6,6 +6,9 @@
 //   - RPM is above cfgRpmMin (still spinning hard)
 //   - gear is within cfgMinGear..cfgMaxGear
 //   - cooldown since last trigger has expired
+//   - RPM did NOT rise faster than cfgRpmRiseMax during the high-throttle phase
+//     (a fast RPM rise means the clutch was in and the engine was free-revving,
+//      not a real gear change under load)
 //
 // Real device: plays the spray MP3 via DFPlayer at gear-appropriate volume.
 // Simulation:  fires tone() on PIN_BUZZER and sets turboSoundUntilMs for LED blink.
@@ -19,12 +22,23 @@ void checkTurbo(uint32_t now) {
   if (now - lastCheckMs < 100) return;
   lastCheckMs = now;
 #endif
+
   int gear = estimateGear(metricRPM, metricSpeed);
+
+  // Accumulate a free-revving flag while throttle is high (only when enabled).
+  // If RPM rose faster than cfgRpmRiseMax in any poll during the high-throttle
+  // phase, the engine had no load (clutch in) → suppress the trigger.
+  // cfgRpmRiseMax == 0 disables the check entirely.
+  if (cfgRpmRiseMax > 0 && prevTPS > cfgThrottleHigh) {
+    if (metricRPM - prevRPM > cfgRpmRiseMax) fastRpmRise = true;
+  }
+
   if (prevTPS       > cfgThrottleHigh &&
       metricTPS     < cfgThrottleLow  &&
       metricRPM     > cfgRpmMin       &&
       gear         >= (int)cfgMinGear &&
       gear         <= (int)cfgMaxGear &&
+      (cfgRpmRiseMax == 0 || !fastRpmRise) &&
       now - lastTurboMs > (uint32_t)cfgCooldownMs) {
     turboCount++;
     lastTurboMs  = now;
@@ -37,5 +51,10 @@ void checkTurbo(uint32_t now) {
     dfplayer.playMp3Folder(gear == 1 ? TRACK_SPRAY_GEAR1 : TRACK_SPRAY_GEAR2);
 #endif
   }
+
+  // Reset free-rev flag once throttle drops — ready for the next press.
+  if (metricTPS < cfgThrottleLow) fastRpmRise = false;
+
+  prevRPM = metricRPM;
   prevTPS = metricTPS;
 }
