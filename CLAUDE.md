@@ -43,6 +43,24 @@ The Wokwi sim replaces real-device peripherals with two components on GPIO:
 **Note: GPIO2 is the ESP32 DevKit built-in LED — do not use it for external circuits.**
 GPIO17 (TX2) is free in simulation because DFPlayer (`PIN_DFP_TX`) is `#else`-guarded.
 
+## Keeping Python in sync with C++
+
+`lib/turbo_logic.py` is a manual Python mirror of two C++ files. If you change
+either of the files below, update the corresponding function in `lib/turbo_logic.py`
+and run `make test` to verify they agree:
+
+| C++ file                         | Python equivalent       |
+| -------------------------------- | ----------------------- |
+| `sketches/turbo/GearEstimator.h` | `estimate_gear()`       |
+| `sketches/turbo/TurboTrigger.h`  | `TurboTrigger.update()` |
+
+Constants in `Config.h` are parsed automatically — no manual sync needed there.
+
+**Future improvement:** compile the C++ logic as a shared library and call it from
+Python via `ctypes` or `pybind11`. That would eliminate drift entirely — the Python
+tests and viewer would run the actual C++ functions. Requires stripping Arduino-specific
+globals from the `.h` files first.
+
 ## After changing sketch or diagram
 
 After any change to `sketches/turbo/turbo.ino` or `Emulators/Wokwi/diagram.json`:
