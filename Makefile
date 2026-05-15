@@ -48,7 +48,7 @@ EMULATOR_PID   := /tmp/elm327_emulator.pid
 # Wokwi / Arduino CLI settings
 ARDUINO_CLI    := arduino-cli
 SKETCH         := sketches/turbo
-WOKWI_BUILD    := Emulators/Wokwi/build
+WOKWI_BUILD    := emulators/wokwi/build
 FQBN           := esp32:esp32:esp32doit-devkit-v1
 
 PORT ?= $(shell ls /dev/cu.usbserial-* /dev/cu.SLAB_USBtoUART* 2>/dev/null | head -1)
@@ -165,7 +165,7 @@ emulator-bridge:
 	socat TCP-LISTEN:$(EMULATOR_PORT),reuseaddr,fork FILE:/tmp/elm_pty,nonblock,raw,echo=0
 
 # ─── Wokwi firmware build ────────────────────────────────────────────────────
-# Compiles sketches/turbo/turbo.ino with -DSIMULATION into Emulators/Wokwi/build/.
+# Compiles sketches/turbo/turbo.ino with -DSIMULATION into emulators/wokwi/build/.
 # The same sketch without -DSIMULATION is the real-device firmware.
 #
 # Install arduino-cli first:

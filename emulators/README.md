@@ -1,10 +1,10 @@
-# Emulators
+# emulators
 
 Browser-based and desktop circuit simulation of the Turbo device — no hardware required.
 
-## Wokwi
+## wokwi
 
-The [`Wokwi/`](Wokwi/) folder contains a full circuit simulation that replays a built-in
+The [`wokwi/`](wokwi/) folder contains a full circuit simulation that replays a built-in
 driving scenario, fires two Turbo triggers, and shows live gauges on a virtual OLED.
 
 ### Simulated hardware
@@ -21,7 +21,7 @@ Under `#ifdef SIMULATION`, real-device peripherals are replaced with:
 ### Option A — wokwi.com (browser, no compilation needed)
 
 1. Go to [wokwi.com](https://wokwi.com) and create a new ESP32 project
-2. Copy `Wokwi/diagram.json`, `Wokwi/libraries.txt`, and `sketches/turbo/turbo.ino`
+2. Copy `wokwi/diagram.json`, `wokwi/libraries.txt`, and `sketches/turbo/turbo.ino`
    into the project (rename the sketch to `sketch.ino`)
 3. Add `-DSIMULATION` to the compile flags
 4. Press **Play**
@@ -39,13 +39,13 @@ The extension is recommended via `.vscode/extensions.json`.
 ```bash
 brew install arduino-cli   # Mac — one time
 make wokwi-setup           # installs ESP32 board + libraries — one time
-make wokwi-build           # compiles sketch → Wokwi/build/
+make wokwi-build           # compiles sketch → wokwi/build/
 ```
 
-4. Open `Wokwi/diagram.json` in VS Code and press **F1 → Wokwi: Start Simulator**
+4. Open `wokwi/diagram.json` in VS Code and press **F1 → Wokwi: Start Simulator**
 
 ### After any sketch change
 
 Re-run `make wokwi-build` before restarting the simulator — the extension runs
-whatever firmware binary is in `Wokwi/build/`. Stale firmware means pin changes,
+whatever firmware binary is in `wokwi/build/`. Stale firmware means pin changes,
 threshold changes, and display changes will not be visible.

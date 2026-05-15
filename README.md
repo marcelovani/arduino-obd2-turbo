@@ -32,7 +32,7 @@ make viewer          # then open http://localhost:8080
 make stop-viewer     # stop it when done
 ```
 
-For firmware: see [Emulators/](Emulators/README.md) (no hardware) or
+For firmware: see [emulators/](emulators/README.md) (no hardware) or
 [sketches/](sketches/README.md) (real ESP32).
 
 ---
@@ -59,15 +59,15 @@ distinctive "pssssh" sound. This device detects that moment from OBD2 data:
 
 ## Hardware
 
-| Component             | Notes                                                   |
-| --------------------- | ------------------------------------------------------- |
-| ELEGOO ESP-WROOM-32   | Main microcontroller — Bluetooth Classic + BLE          |
-| OBD BLE dongle        | BLE (not Classic BT) — plugs into car OBD2 port         |
-| 0.96" SSD1306 OLED    | 128×64 SPI display (pins: GND,VCC,D0,D1,RES,DC,CS)      |
-| DFPlayer Mini         | MP3 playback module — 3.3V power, 1kΩ on RX line        |
-| KY-040 rotary encoder | Navigation: rotate = cycle views, click = disconnect    |
+| Component             | Notes                                                     |
+| --------------------- | --------------------------------------------------------- |
+| ELEGOO ESP-WROOM-32   | Main microcontroller — Bluetooth Classic + BLE            |
+| OBD BLE dongle        | BLE (not Classic BT) — plugs into car OBD2 port           |
+| 0.96" SSD1306 OLED    | 128×64 SPI display (pins: GND,VCC,D0,D1,RES,DC,CS)        |
+| DFPlayer Mini         | MP3 playback module — 3.3V power, 1kΩ on RX line          |
+| KY-040 rotary encoder | Navigation: rotate = cycle views, click = disconnect      |
 | microSD card (FAT32)  | Stores audio files in `/mp3/` — see [mp3/](mp3/README.md) |
-| Small speaker (4–8 Ω) | Plays the Turbo sound                                   |
+| Small speaker (4–8 Ω) | Plays the Turbo sound                                     |
 
 ---
 
@@ -86,15 +86,15 @@ survive power cycles (stored in NVS flash).
 
 ## Folder guide
 
-| Folder | Contents |
-| ------ | -------- |
-| [Emulators/](Emulators/README.md) | Wokwi circuit simulation — run the firmware without hardware |
-| [lib/](lib/README.md) | Shared Python logic (trigger detection) used by tests and viewer |
-| [mp3/](mp3/README.md) | Audio files for the SD card — file list, format requirements, speaker wiring |
-| [recordings/](recordings/README.md) | OBD2 CSV recordings — how to record, export via WiFi, CSV format |
-| [sketches/](sketches/README.md) | Arduino sketch — structure, build modes, flashing instructions |
-| [tests/](tests/README.md) | Test suite — unit tests, visual monitor, integration tests |
-| [viewer/](viewer/README.md) | Web viewer for inspecting recordings as interactive charts |
+| Folder                              | Contents                                                                     |
+| ----------------------------------- | ---------------------------------------------------------------------------- |
+| [emulators/](emulators/README.md)   | Wokwi circuit simulation — run the firmware without hardware                 |
+| [lib/](lib/README.md)               | Shared Python logic (trigger detection) used by tests and viewer             |
+| [mp3/](mp3/README.md)               | Audio files for the SD card — file list, format requirements, speaker wiring |
+| [recordings/](recordings/README.md) | OBD2 CSV recordings — how to record, export via WiFi, CSV format             |
+| [sketches/](sketches/README.md)     | Arduino sketch — structure, build modes, flashing instructions               |
+| [tests/](tests/README.md)           | Test suite — unit tests, visual monitor, integration tests                   |
+| [viewer/](viewer/README.md)         | Web viewer for inspecting recordings as interactive charts                   |
 
 ---
 
@@ -127,12 +127,12 @@ See [viewer/README.md](viewer/README.md) for details.
   <em>The Wokwi circuit simulation running inside VS Code — the virtual OLED displays live gauges, the encoder can be turned to cycle views, and the buzzer fires whenever the built-in driving scenario triggers a Turbo event. No hardware required.</em>
 </p>
 
-A full circuit simulation lives in [`Emulators/Wokwi/`](Emulators/Wokwi/) — no hardware needed.
-See [Emulators/README.md](Emulators/README.md) for setup instructions.
+A full circuit simulation lives in [`emulators/wokwi/`](emulators/wokwi/) — no hardware needed.
+See [emulators/README.md](emulators/README.md) for setup instructions.
 
 ```bash
 make wokwi-setup   # one time
-make wokwi-build   # compile firmware, then open Emulators/Wokwi/diagram.json in VS Code
+make wokwi-build   # compile firmware, then open emulators/wokwi/diagram.json in VS Code
 ```
 
 ---

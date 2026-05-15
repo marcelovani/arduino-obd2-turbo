@@ -63,7 +63,7 @@ globals from the `.h` files first.
 
 ## After changing sketch or diagram
 
-After any change to `sketches/turbo/turbo.ino` or `Emulators/Wokwi/diagram.json`:
+After any change to `sketches/turbo/turbo.ino` or `emulators/wokwi/diagram.json`:
 
 1. Run `make test` — verifies logic is correct (Python unit + integration tests)
 2. Run `make wokwi-build` — recompiles the sketch so Wokwi uses the new firmware
