@@ -55,6 +55,11 @@ void startRecording() {
   String fname = nextLogFilename();
   recFile = LittleFS.open(fname, "w");
   if (!recFile) return;
+  // Embed active runtime settings so the viewer can replay trigger detection accurately.
+  recFile.printf("# throttle_high=%.1f,throttle_low=%.1f,rpm_min=%.1f,min_gear=%d,max_gear=%d,cooldown_ms=%d,speed12=%.1f,speed23=%.1f\n",
+    cfgThrottleHigh, cfgThrottleLow, cfgRpmMin,
+    (int)cfgMinGear, (int)cfgMaxGear, (int)cfgCooldownMs,
+    cfgSpeed12, cfgSpeed23);
   recFile.println("ms,tps,rpm,speed");
   recActive      = true;
   recSampleCount = 0;

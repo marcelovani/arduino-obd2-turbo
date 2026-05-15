@@ -10,25 +10,49 @@ from urllib.parse import urlparse
 PORT = 8080
 RECORDINGS_DIR = os.path.join(os.path.dirname(__file__), '..', 'recordings')
 
-# Mirror Config.h defaults — same values the firmware uses
-THROTTLE_HIGH = 60.0   # % — TPS must have been above this
-THROTTLE_LOW  = 10.0   # % — TPS must now be below this
-RPM_MIN       = 3000.0 # RPM — must be spinning hard
-MIN_GEAR      = 1
-MAX_GEAR      = 2
-COOLDOWN_MS   = 2000
+# Fallback defaults — mirror Config.h. Used only for CSV files recorded before
+# the settings header was added (old recordings without a # line).
+DEFAULT_SETTINGS = {
+    'throttle_high': 60.0,
+    'throttle_low':  10.0,
+    'rpm_min':       3000.0,
+    'min_gear':      1,
+    'max_gear':      2,
+    'cooldown_ms':   2000,
+    'speed12':       50.0,
+    'speed23':       65.0,
+}
 
 # Measured durations of the spray MP3 files (ffprobe)
 SPRAY_DURATION_S = {1: 0.759, 2: 0.741}
 
 
-def estimate_gear(rpm, speed):
+def parse_settings_header(line):
+    """Parse the # settings line written by Recorder.h into a dict.
+    Returns None if the line is not a valid settings header."""
+    if not line.startswith('#'):
+        return None
+    settings = dict(DEFAULT_SETTINGS)
+    for part in line[1:].split(','):
+        part = part.strip()
+        if '=' not in part:
+            continue
+        key, _, val = part.partition('=')
+        key = key.strip()
+        if key in ('min_gear', 'max_gear', 'cooldown_ms'):
+            settings[key] = int(float(val))
+        elif key in settings:
+            settings[key] = float(val)
+    return settings
+
+
+def estimate_gear(rpm, speed, s12, s23):
     """Mirror GearEstimator.h — speed-band approach."""
     if speed < 3.0 or rpm < 200.0:
         return 0
-    if speed < 50.0:
+    if speed < s12:
         return 1
-    if speed < 65.0:
+    if speed < s23:
         return 2
     if speed < 145.0:
         return 3
@@ -39,24 +63,24 @@ def estimate_gear(rpm, speed):
     return 6
 
 
-def detect_triggers(rows):
+def detect_triggers(rows, settings):
     """Mirror TurboTrigger.h — returns list of {start_s, end_s, gear}."""
     triggers = []
     prev_tps = 0.0
-    last_trigger_ms = -(COOLDOWN_MS + 1)
+    last_trigger_ms = -(settings['cooldown_ms'] + 1)
 
     for row in rows:
         ms    = row['ms_abs']
         tps   = row['tps']
         rpm   = row['rpm']
         speed = row['speed']
-        gear  = estimate_gear(rpm, speed)
+        gear  = estimate_gear(rpm, speed, settings['speed12'], settings['speed23'])
 
-        if (prev_tps    >  THROTTLE_HIGH and
-                tps     <  THROTTLE_LOW  and
-                rpm     >  RPM_MIN       and
-                MIN_GEAR <= gear <= MAX_GEAR and
-                ms - last_trigger_ms > COOLDOWN_MS):
+        if (prev_tps >= settings['throttle_high'] and
+                tps  <  settings['throttle_low']  and
+                rpm  >  settings['rpm_min']        and
+                settings['min_gear'] <= gear <= settings['max_gear'] and
+                ms - last_trigger_ms > settings['cooldown_ms']):
             duration = SPRAY_DURATION_S.get(gear, 0.75)
             triggers.append({
                 'start_s': round(row['time_s'], 3),
@@ -129,7 +153,8 @@ HTML = r"""<!DOCTYPE html>
       gap: 12px;
     }
     #title { font-size: 15px; color: #aaa; font-weight: normal; }
-    #stats { font-size: 12px; color: #555; }
+    #stats         { font-size: 12px; color: #555; }
+    #settings-info { font-size: 11px; color: #3a3a3a; }
     #chart-wrap {
       flex: 1;
       position: relative;
@@ -159,6 +184,7 @@ HTML = r"""<!DOCTYPE html>
   <div id="main">
     <div id="title">Select a recording</div>
     <div id="stats"></div>
+    <div id="settings-info"></div>
     <div id="empty">← pick a file</div>
     <div id="chart-wrap" style="display:none">
       <canvas id="chart"></canvas>
@@ -197,8 +223,12 @@ HTML = r"""<!DOCTYPE html>
       const maxRPM   = Math.max(...data.rpm).toFixed(0);
       const maxSpeed = Math.max(...data.speed).toFixed(0);
       const sprays   = data.triggers.length;
+      const s        = data.settings;
+      const src      = s._source === 'csv' ? 'settings from recording' : 'default settings (old recording)';
       document.getElementById('stats').textContent =
         `${data.time.length} samples · ${dur}s · peak TPS ${maxTPS}% · peak RPM ${maxRPM} · peak speed ${maxSpeed} km/h · ${sprays} spray${sprays !== 1 ? 's' : ''}`;
+      document.getElementById('settings-info').textContent =
+        `Trigger thresholds (${src}): TPS ${s.throttle_high}%→${s.throttle_low}%  RPM>${s.rpm_min}  gear ${s.min_gear}–${s.max_gear}  spd12=${s.speed12}  spd23=${s.speed23}`;
 
       document.getElementById('empty').style.display     = 'none';
       document.getElementById('chart-wrap').style.display = 'block';
@@ -356,6 +386,10 @@ HTML = r"""<!DOCTYPE html>
 """
 
 
+class Server(HTTPServer):
+    allow_reuse_address = True
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
@@ -383,8 +417,19 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             rows = []
-            data = {'time': [], 'tps': [], 'rpm': [], 'speed': [], 'triggers': []}
+            settings = None
+            data = {'time': [], 'tps': [], 'rpm': [], 'speed': [],
+                    'triggers': [], 'settings': None}
             with open(filepath, newline='') as f:
+                # Check for settings header before handing off to csv.DictReader
+                first = f.readline()
+                parsed = parse_settings_header(first)
+                if parsed is not None:
+                    settings = parsed
+                else:
+                    f.seek(0)  # no header — rewind so DictReader sees the column row
+                settings = settings or dict(DEFAULT_SETTINGS)
+
                 reader = csv.DictReader(f)
                 t0 = None
                 for row in reader:
@@ -402,7 +447,9 @@ class Handler(BaseHTTPRequestHandler):
                     rows.append({'ms_abs': ms, 'time_s': time_s,
                                  'tps': tps, 'rpm': rpm, 'speed': speed})
 
-            data['triggers'] = detect_triggers(rows)
+            settings['_source'] = 'csv' if parsed is not None else 'defaults'
+            data['settings'] = settings
+            data['triggers'] = detect_triggers(rows, settings)
             self._send_json(data)
 
         else:
@@ -424,6 +471,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    server = HTTPServer(('', PORT), Handler)
+    try:
+        server = Server(('', PORT), Handler)
+    except OSError:
+        print(f'ERROR: port {PORT} is already in use. Kill the existing process and retry.')
+        raise SystemExit(1)
     print(f'Open http://localhost:{PORT}')
     server.serve_forever()
