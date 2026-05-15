@@ -4,14 +4,16 @@
 import csv
 import json
 import os
-import re
+import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
 PORT = 8080
 VIEWER_DIR     = os.path.dirname(__file__)
 RECORDINGS_DIR = os.path.join(VIEWER_DIR, '..', 'recordings')
-CONFIG_H       = os.path.join(VIEWER_DIR, '..', 'sketches', 'turbo', 'Config.h')
+
+sys.path.insert(0, os.path.join(VIEWER_DIR, '..', 'lib'))
+from turbo_logic import TurboTrigger, load_config_h_as_settings  # noqa: E402
 
 STATIC_FILES = {
     '/':           ('index.html', 'text/html'),
@@ -20,43 +22,7 @@ STATIC_FILES = {
     '/app.js':     ('app.js',     'application/javascript'),
 }
 
-# Maps #define names in Config.h to DEFAULT_SETTINGS keys.
-_CONFIG_MAP = {
-    'TURBO_THROTTLE_HIGH': ('throttle_high', float),
-    'TURBO_THROTTLE_LOW':  ('throttle_low',  float),
-    'TURBO_RPM_MIN':       ('rpm_min',        float),
-    'TURBO_MIN_GEAR':      ('min_gear',       int),
-    'TURBO_MAX_GEAR':      ('max_gear',       int),
-    'TURBO_COOLDOWN_MS':   ('cooldown_ms',    int),
-    'TURBO_SPEED_GEAR12':  ('speed12',        float),
-    'TURBO_SPEED_GEAR23':  ('speed23',        float),
-}
-
-# Hard fallback — used only if Config.h cannot be read at all.
-_FALLBACK = {
-    'throttle_high': 60.0, 'throttle_low': 10.0, 'rpm_min': 3000.0,
-    'min_gear': 1, 'max_gear': 2, 'cooldown_ms': 2000,
-    'speed12': 50.0, 'speed23': 65.0,
-}
-
-
-def load_defaults_from_config_h():
-    """Parse #define values from Config.h and return them as a settings dict.
-    Falls back to hard-coded values if the file cannot be read."""
-    settings = dict(_FALLBACK)
-    try:
-        with open(CONFIG_H) as f:
-            for line in f:
-                m = re.match(r'#define\s+(\w+)\s+([\d.]+)f?', line)
-                if m and m.group(1) in _CONFIG_MAP:
-                    key, cast = _CONFIG_MAP[m.group(1)]
-                    settings[key] = cast(m.group(2))
-    except OSError:
-        print(f'Warning: could not read {CONFIG_H}, using built-in defaults.')
-    return settings
-
-
-DEFAULT_SETTINGS = load_defaults_from_config_h()
+DEFAULT_SETTINGS = load_config_h_as_settings()
 
 # Measured durations of the spray MP3 files (ffprobe)
 SPRAY_DURATION_S = {1: 0.759, 2: 0.741}
@@ -81,52 +47,29 @@ def parse_settings_header(line):
     return settings
 
 
-def estimate_gear(rpm, speed, s12, s23):
-    """Mirror GearEstimator.h — speed-band approach."""
-    if speed < 3.0 or rpm < 200.0:
-        return 0
-    if speed < s12:
-        return 1
-    if speed < s23:
-        return 2
-    if speed < 145.0:
-        return 3
-    if speed < 165.0:
-        return 4
-    if speed < 200.0:
-        return 5
-    return 6
-
-
 def detect_triggers(rows, settings):
-    """Mirror TurboTrigger.h — returns list of {start_s, end_s, gear}."""
-    triggers = []
-    prev_tps = 0.0
-    last_trigger_ms = -(settings['cooldown_ms'] + 1)
-
+    """Replay rows through TurboTrigger from lib/turbo_logic.py."""
+    trigger = TurboTrigger(
+        throttle_high=settings['throttle_high'],
+        throttle_low= settings['throttle_low'],
+        rpm_min=      settings['rpm_min'],
+        min_gear=     settings['min_gear'],
+        max_gear=     settings['max_gear'],
+        cooldown_ms=  settings['cooldown_ms'],
+        speed12=      settings['speed12'],
+        speed23=      settings['speed23'],
+    )
+    results = []
     for row in rows:
-        ms    = row['ms_abs']
-        tps   = row['tps']
-        rpm   = row['rpm']
-        speed = row['speed']
-        gear  = estimate_gear(rpm, speed, settings['speed12'], settings['speed23'])
-
-        if (prev_tps >= settings['throttle_high'] and
-                tps  <  settings['throttle_low']  and
-                rpm  >  settings['rpm_min']        and
-                settings['min_gear'] <= gear <= settings['max_gear'] and
-                ms - last_trigger_ms > settings['cooldown_ms']):
+        if trigger.update(row['tps'], row['rpm'], row['speed'], row['ms_abs']):
+            gear     = trigger.events[-1]['gear']
             duration = SPRAY_DURATION_S.get(gear, 0.75)
-            triggers.append({
+            results.append({
                 'start_s': round(row['time_s'], 3),
                 'end_s':   round(row['time_s'] + duration, 3),
                 'gear':    gear,
             })
-            last_trigger_ms = ms
-
-        prev_tps = tps
-
-    return triggers
+    return results
 
 
 class Server(HTTPServer):

@@ -1,84 +1,31 @@
 """
 Python mirror of the C++ OBD logic in the Arduino sketch.
 
-These functions are kept in sync with the constants and algorithms in:
-  sketches/turbo/turbo.ino
+Core logic lives in lib/turbo_logic.py (shared with the recording viewer).
+This module re-exports everything tests need and adds MenuController,
+which is test-specific and not needed by the viewer.
 
-They are used by:
-  - Unit tests (tests/unit/)
-  - Scenario simulation (tests/visual_monitor.py)
-  - Integration tests (tests/integration/)
-
-When you change a threshold or algorithm in the sketch, update it here too.
+When you change a threshold or algorithm in the sketch, update lib/turbo_logic.py.
+Constants are loaded from Config.h automatically — no manual sync needed.
 """
 
-# ── Turbo trigger thresholds ────────────────────────────────────────────────
-# Keep in sync with #define TURBO_* in the sketches
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lib'))
 
-TURBO_THROTTLE_HIGH  = 60.0   # TPS must have been above this (hard acceleration)
-TURBO_THROTTLE_LOW   = 10.0   # TPS must now be below this (lifted off)
-TURBO_RPM_MIN        = 3000.0 # RPM must be above this (near peak / about to shift)
-TURBO_MIN_GEAR       = 1      # trigger from 1st gear upward
-TURBO_MAX_GEAR       = 2      # only trigger in 2nd gear or lower
-TURBO_COOLDOWN_MS    = 2000   # min ms between Turbo sounds
-# Speed-band gear boundaries (km/h) — CLA180: shifts 1→2 at ~30 mph (48 km/h), 2→3 at ~40 mph (64 km/h)
-TURBO_SPEED_GEAR12   = 50.0   # speed below this → gear 1
-TURBO_SPEED_GEAR23   = 65.0   # speed below this (and ≥ GEAR12) → gear 2
-
-
-def parse_pid(resp: str, byte_count: int, multiplier: float) -> float:
-    """
-    Mirror of C++ parsePID(resp, bytes, multiplier).
-
-    Parses a compact ELM327 response (ATS0 mode, no spaces).
-    Example responses:
-      "410D3C"     → speed 60 km/h  (byte_count=1, multiplier=1.0)
-      "410CXXYY"   → RPM            (byte_count=2, multiplier=0.25)
-      "41113F"     → throttle ~25%  (byte_count=1, multiplier=100/255)
-
-    Returns -1.0 on bad/short/empty response.
-    """
-    resp = resp.strip().upper()
-    if not resp or len(resp) < 4 + byte_count * 2:
-        return -1.0
-    hex_part = resp[4:]  # skip "41XX" header
-    try:
-        if byte_count == 1:
-            return int(hex_part[:2], 16) * multiplier
-        hi = int(hex_part[:2], 16)
-        lo = int(hex_part[2:4], 16)
-        return (hi * 256 + lo) * multiplier
-    except ValueError:
-        return -1.0
-
-
-def estimate_gear(rpm: float, speed_kmh: float) -> int:
-    """
-    Mirror of C++ estimateGear(rpm, speedKmh).
-
-    OBD2 PID 010D always returns speed in km/h (SAE J1979 standard), even for
-    UK cars. The display converts to mph but all speed thresholds use km/h.
-
-    Estimates gear from speed bands only (not RPM/speed ratio).
-    Returns 0 if gear cannot be determined (stopped or engine off).
-
-    CLA180 defaults (tune via Settings menu after driving):
-      Gear 0: speed < 3 km/h or RPM < 200
-      Gear 1: speed < 50 km/h
-      Gear 2: speed < 80 km/h
-      Gear 3: speed < 145 km/h
-      Gear 4: speed < 165 km/h
-      Gear 5: speed < 200 km/h
-      Gear 6: speed ≥ 200 km/h
-    """
-    if speed_kmh < 3 or rpm < 200:
-        return 0
-    if speed_kmh < TURBO_SPEED_GEAR12: return 1
-    if speed_kmh < TURBO_SPEED_GEAR23: return 2
-    if speed_kmh < 145:                return 3
-    if speed_kmh < 165:                return 4
-    if speed_kmh < 200:                return 5
-    return 6
+from turbo_logic import (  # noqa: F401 — re-exported for test imports
+    TURBO_THROTTLE_HIGH,
+    TURBO_THROTTLE_LOW,
+    TURBO_RPM_MIN,
+    TURBO_MIN_GEAR,
+    TURBO_MAX_GEAR,
+    TURBO_COOLDOWN_MS,
+    TURBO_SPEED_GEAR12,
+    TURBO_SPEED_GEAR23,
+    parse_pid,
+    estimate_gear,
+    TurboTrigger,
+)
 
 
 class MenuController:
