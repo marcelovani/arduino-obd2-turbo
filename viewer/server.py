@@ -25,7 +25,7 @@ STATIC_FILES = {
 DEFAULT_SETTINGS = load_config_h_as_settings()
 
 # Measured durations of the spray MP3 files (ffprobe)
-SPRAY_DURATION_S = {1: 1.228, 2: 1.228, 3: 1.228}  # all gears use 0012.mp3
+SPRAY_DURATION_S = {1: 1.185, 2: 1.185, 3: 1.185}  # all gears use 0012.mp3
 
 
 def parse_settings_header(line):
