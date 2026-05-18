@@ -25,10 +25,10 @@
 #define TRACK_NO_OBD2      4   // "OBD2 not connected" — scan timeout or connect fail
 #define TRACK_DEMO_MODE    8   // "Demo mode"          — demo mode activated
 #define TRACK_GOODBYE      9   // "Goodbye"            — power off
-#define TRACK_SPRAY_DEFAULT 12 // default spray        — all gear changes
-#define TRACK_SPRAY_GEAR1   12 // alternative: longer  — 1st→2nd gear change
-#define TRACK_SPRAY_GEAR2   12 // alternative: shorter — 2nd→3rd gear change
-#define TRACK_SPRAY_GEAR3   12 // (same as default)    — 3rd→4th gear change
+#define TRACK_SPRAY_DEFAULT 12 // default spray (0012.wav) — all gear changes
+#define TRACK_SPRAY_GEAR1   12 // alternative: longer      — 1st→2nd gear change
+#define TRACK_SPRAY_GEAR2   12 // alternative: shorter     — 2nd→3rd gear change
+#define TRACK_SPRAY_GEAR3   12 // (same as default)        — 3rd→4th gear change
 
 // ── Turbo thresholds (compile-time defaults — overridden at runtime via cfg*) ──
 #define TURBO_THROTTLE_HIGH  60.0f   // % — TPS must have been above this (hard acceleration)
