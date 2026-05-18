@@ -48,7 +48,7 @@ void checkTurbo(uint32_t now) {
     tone(PIN_BUZZER, 900, 350);
 #else
     dfplayer.volume(gear == 1 ? (int)cfgVolGear1 : (int)cfgVolGear2);
-    dfplayer.playMp3Folder(gear == 1 ? TRACK_SPRAY_GEAR1 : TRACK_SPRAY_GEAR2);
+    dfplayer.playMp3Folder(TRACK_SPRAY_DEFAULT);
 #endif
   }
 

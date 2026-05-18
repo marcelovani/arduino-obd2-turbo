@@ -12,8 +12,9 @@ name, so copy order does not matter.
 | `0004.mp3` | "OBD2 not connected" | Scan timeout (30 s) or Bluetooth connect fail   |
 | `0008.mp3` | "Demo mode"          | When demo mode is turned on via the menu        |
 | `0009.mp3` | "Goodbye"            | When the Power option is used to turn off       |
-| `0010.mp3` | Long spray           | Turbo trigger in 1st gear (1st → 2nd change)    |
-| `0011.mp3` | Faster spray         | Turbo trigger in 2nd gear (2nd → 3rd change)    |
+| `0010.mp3` | Long spray (alt)     | Alternative for 1st gear — not used by default  |
+| `0011.mp3` | Faster spray (alt)   | Alternative for 2nd gear — not used by default  |
+| `0012.mp3` | Default spray        | All gear triggers (1st, 2nd, 3rd)               |
 
 Format the card as **FAT32**. The `mp3/` folder must be at the root of the card.
 
