@@ -98,17 +98,21 @@ void doScanning() {
     scanStartMs = millis();
     scanFrame   = 0;
     bleFound    = false;
+    Serial.println("[scan] playing pairing voice (3 s)...");
     dfplayerVoice(TRACK_PAIRING);
+    Serial.println("[scan] voice done — starting BLE scan bursts");
   }
 
   if (bleFound) {
     targetName    = bleDevice->getName().c_str();
+    Serial.print("[scan] found device: "); Serial.println(targetName);
     connectFailed = false;
     appState      = CONNECTING;
     return;
   }
 
   if (millis() - scanStartMs >= SCAN_TIMEOUT_MS) {
+    Serial.println("[scan] timeout — no OBD2 found");
     showMessage("No OBD2 found", "Display only", "Click for menu");
     dfplayerVoice(TRACK_NO_OBD2);
     appState = NO_OBD;
@@ -148,12 +152,14 @@ void doNoObd() {
 void doConnecting() {
   char nameBuf[18];
   strncpy(nameBuf, targetName.c_str(), 17); nameBuf[17] = '\0';
+  Serial.print("[connect] connecting to: "); Serial.println(nameBuf);
   showMessage("Found:", nameBuf, "Connecting BLE...");
 
   if (bleClient) { bleClient->disconnect(); bleClient = nullptr; }
   bleClient = BLEDevice::createClient();
 
   if (!bleClient->connect(bleDevice)) {
+    Serial.println("[connect] FAILED — rescanning");
     connectFailed = true;
     showMessage("Connect failed", "Scanning again...");
     dfplayerVoice(TRACK_NO_OBD2);
@@ -162,9 +168,11 @@ void doConnecting() {
     bleFound    = false;
     return;
   }
+  Serial.println("[connect] BLE connected");
 
   BLERemoteService* svc = bleClient->getService(BLE_SVC_UUID);
   if (!svc) {
+    Serial.println("[connect] service FFF0 missing — rescanning");
     bleClient->disconnect();
     connectFailed = true;
     showMessage("Service missing", "Scanning again...");
@@ -179,6 +187,7 @@ void doConnecting() {
   bleNotifyCh = svc->getCharacteristic(BLE_NOTIFY_UUID);
 
   if (!bleWriteCh || !bleNotifyCh) {
+    Serial.println("[connect] chars FFF1/FFF2 missing — rescanning");
     bleClient->disconnect();
     connectFailed = true;
     showMessage("Chars missing", "Scanning again...");
@@ -192,6 +201,7 @@ void doConnecting() {
   if (bleNotifyCh->canNotify())
     bleNotifyCh->registerForNotify(bleNotifyCB);
 
+  Serial.println("[connect] all chars OK — moving to INIT_ELM");
   bleConnected  = true;
   connectFailed = false;
   appState      = INIT_ELM;
@@ -200,6 +210,7 @@ void doConnecting() {
 void doInitElm() {
   char nameBuf[18];
   strncpy(nameBuf, targetName.c_str(), 17); nameBuf[17] = '\0';
+  Serial.println("[init] sending ATZ + init commands...");
   showMessage("Initialising...", nameBuf);
 
   obdSend("ATZ", 3000); delay(500);
@@ -220,6 +231,7 @@ void doInitElm() {
     display.drawStr(0, 59, vbuf);
   }
   display.sendBuffer();
+  Serial.println("[init] done — entering RUNNING");
   delay(1500);
   appState = RUNNING;
 }

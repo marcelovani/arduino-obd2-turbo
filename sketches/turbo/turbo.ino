@@ -154,18 +154,30 @@ void setup() {
 
 #else
   // 3-PROD. Load NVS settings, LED, DFPlayer startup tone, BLE scan
+  Serial.begin(115200);
+  Serial.println("[setup] start");
   loadSettings();
+  Serial.println("[setup] loadSettings OK");
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, LOW);
   Serial2.begin(9600, SERIAL_8N1, PIN_DFP_RX, PIN_DFP_TX);
   delay(500);  // DFPlayer needs ~500 ms after power-on before it responds
-  if (dfplayer.begin(Serial2)) dfplayer.volume((int)cfgVolVoice);
+  Serial.println("[setup] Serial2 ready");
+  if (dfplayer.begin(Serial2)) {
+    dfplayer.volume((int)cfgVolVoice);
+    Serial.println("[setup] DFPlayer OK");
+  } else {
+    Serial.println("[setup] DFPlayer FAILED (continuing)");
+  }
+  Serial.println("[setup] BLE init...");
   BLEDevice::init("");
+  Serial.println("[setup] BLE init OK");
   BLEScan* bleScan = BLEDevice::getScan();
   bleScan->setAdvertisedDeviceCallbacks(new OBDScanCallbacks(), false);
   bleScan->setActiveScan(true);
   bleScan->setInterval(100);
   bleScan->setWindow(99);
+  Serial.println("[setup] done — entering loop");
 #endif
 }
 
