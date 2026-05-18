@@ -39,9 +39,9 @@ static SettingDef CFG_DEFS[] = {
   {"Max Gear",     &cfgMaxGear,        1.0f,   1.0f,    6.0f, SETTING_INT  }, // only trigger in this gear or lower
   {"Cooldown ms",  &cfgCooldownMs,   100.0f, 500.0f,10000.0f, SETTING_INT  }, // min time between two triggers (ms)
   // Audio volumes (DFPlayer scale 0–30):
-  {"Vol Gear 1",   &cfgVolGear1,       1.0f,   0.0f,   30.0f, SETTING_INT  }, // spray volume for 1st gear change
-  {"Vol Gear 2",   &cfgVolGear2,       1.0f,   0.0f,   30.0f, SETTING_INT  }, // spray volume for 2nd gear change
-  {"Vol Voice",    &cfgVolVoice,       1.0f,   0.0f,   30.0f, SETTING_INT  }, // voice announcements volume
+  {"Vol Gear 1",   &cfgVolGear1,       1.0f,   1.0f,   30.0f, SETTING_INT  }, // spray volume for 1st gear change
+  {"Vol Gear 2",   &cfgVolGear2,       1.0f,   1.0f,   30.0f, SETTING_INT  }, // spray volume for 2nd gear change
+  {"Vol Voice",    &cfgVolVoice,       1.0f,   1.0f,   30.0f, SETTING_INT  }, // voice announcements volume
   // Gear estimation speed bands (km/h — OBD2 PID 010D is always km/h):
   {"Spd G1/G2 km", &cfgSpeed12,        5.0f,   0.0f,  100.0f, SETTING_INT  }, // speed below this = 1st gear
   {"Spd G2/G3 km", &cfgSpeed23,        5.0f,   0.0f,  150.0f, SETTING_INT  }, // speed below this (and ≥ G1/G2) = 2nd gear

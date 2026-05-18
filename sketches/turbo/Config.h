@@ -37,9 +37,9 @@
 #define TURBO_MIN_GEAR       1
 #define TURBO_MAX_GEAR       2
 #define TURBO_COOLDOWN_MS    2000
-#define TURBO_VOLUME_GEAR1   30      // 100% — DFPlayer max is 30
-#define TURBO_VOLUME_GEAR2   27      // 90%
-#define TURBO_VOLUME_VOICE   13      // 50% — spoken announcements
+#define TURBO_VOLUME_GEAR1   13      // spray volume — kept low to avoid clock slowdown on clone
+#define TURBO_VOLUME_GEAR2   13      // spray volume — same as gear 1
+#define TURBO_VOLUME_VOICE   10      // spoken announcements
 #define VOICE_PLAY_MS        3000    // ms to wait for voice clip to finish before muting amp
 // Speed-band gear estimation — OBD2 PID 010D returns speed in km/h (SAE J1979).
 // Tune via Settings menu. CLA180: shifts 1→2 at ~30 mph (48 km/h), 2→3 at ~40 mph (64 km/h).
