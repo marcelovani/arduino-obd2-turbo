@@ -1,0 +1,439 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 730" width="1100" height="730" font-family="Arial, sans-serif">
+
+  <!-- Background: tan/beige perfboard color -->
+  <rect width="1100" height="730" fill="#C8A070"/>
+
+  <!-- Perfboard dot grid overlay -->
+  <defs>
+    <pattern id="dots" x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+      <circle cx="7" cy="7" r="1.2" fill="#A07040" opacity="0.5"/>
+    </pattern>
+  </defs>
+  <rect width="1100" height="730" fill="url(#dots)"/>
+
+  <!-- Title -->
+  <text x="550" y="34" text-anchor="middle" font-size="22" font-weight="bold" fill="#1A1A1A">Turbo BOV — Wiring Diagram</text>
+  <text x="550" y="52" text-anchor="middle" font-size="12" fill="#3A2A10">ESP32 ELEGOO WROOM-32 · DFPlayer Mini · SSD1306 OLED SPI · KY-040 Encoder · Speaker</text>
+
+  <!-- ══════════════════════════════════════════════════════════
+       POWER RAILS (far left, vertical)
+       VCC rail: x=52, GND rail: x=80
+       Rail spans y=70 to y=660
+       ══════════════════════════════════════════════════════════ -->
+
+  <!-- VCC rail (red) -->
+  <line x1="52" y1="70" x2="52" y2="660" stroke="#CC0000" stroke-width="3"/>
+  <text x="52" y="65" text-anchor="middle" font-size="11" font-weight="bold" fill="#CC0000">3V3</text>
+  <text x="52" y="675" text-anchor="middle" font-size="10" fill="#CC0000">+</text>
+
+  <!-- GND rail (black) -->
+  <line x1="80" y1="70" x2="80" y2="660" stroke="#1A1A1A" stroke-width="3"/>
+  <text x="80" y="65" text-anchor="middle" font-size="11" font-weight="bold" fill="#1A1A1A">GND</text>
+  <text x="80" y="675" text-anchor="middle" font-size="10" fill="#1A1A1A">−</text>
+
+  <!-- Rail bracket labels -->
+  <text x="66" y="700" text-anchor="middle" font-size="10" fill="#5A3A10">Power Rails</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       ESP32 DevKit (center)
+       Box: x=430, y=90, width=220, height=560
+       Left pins (right edge at x=430): y positions for each pin
+       Right pins (left edge at x=650): y positions for each pin
+       ══════════════════════════════════════════════════════════ -->
+
+  <!-- ESP32 box -->
+  <rect x="430" y="90" width="220" height="560" rx="6" fill="#1565C0" stroke="#0D47A1" stroke-width="2"/>
+  <text x="540" y="120" text-anchor="middle" font-size="16" font-weight="bold" fill="white">ESP32</text>
+  <text x="540" y="138" text-anchor="middle" font-size="10" fill="#BBDEFB">ELEGOO WROOM-32</text>
+
+  <!-- Dividing line between labels and chip area -->
+  <line x1="430" y1="148" x2="650" y2="148" stroke="#0D47A1" stroke-width="1" stroke-dasharray="4,3"/>
+
+  <!-- Left-side pin rows (pins exit to the LEFT at x=430)
+       We have 8 pins on the left side, spread across the box height.
+       Vertical span: y=165 to y=615, step = (615-165)/7 = ~64px
+  -->
+
+  <!-- Pin rows: define pin dot x=430 (on left edge), labels inside box -->
+  <!-- PIN: 3V3 -->
+  <circle cx="430" cy="175" r="5" fill="#CC0000"/>
+  <text x="438" y="179" font-size="10" fill="white">3V3</text>
+
+  <!-- PIN: GND (left) -->
+  <circle cx="430" cy="235" r="5" fill="#1A1A1A"/>
+  <text x="438" y="239" font-size="10" fill="white">GND</text>
+
+  <!-- PIN: GPIO15 (RES) -->
+  <circle cx="430" cy="295" r="5" fill="#FF6F00"/>
+  <text x="438" y="299" font-size="10" fill="white">GPIO15</text>
+
+  <!-- PIN: GPIO16 (RX2) -->
+  <circle cx="430" cy="355" r="5" fill="#1565C0"/>
+  <text x="438" y="359" font-size="10" fill="white">GPIO16 (RX2)</text>
+
+  <!-- PIN: GPIO17 (TX2) -->
+  <circle cx="430" cy="415" r="5" fill="#0D47A1"/>
+  <text x="438" y="419" font-size="10" fill="white">GPIO17 (TX2)</text>
+
+  <!-- PIN: GPIO5 (CS) -->
+  <circle cx="430" cy="475" r="5" fill="#FF8F00"/>
+  <text x="438" y="479" font-size="10" fill="white">GPIO5</text>
+
+  <!-- PIN: GPIO18 (SCK) -->
+  <circle cx="430" cy="535" r="5" fill="#E65100"/>
+  <text x="438" y="539" font-size="10" fill="white">GPIO18 (SCK)</text>
+
+  <!-- PIN: GPIO23 (MOSI) -->
+  <circle cx="430" cy="595" r="5" fill="#BF360C"/>
+  <text x="438" y="599" font-size="10" fill="white">GPIO23 (MOSI)</text>
+
+  <!-- Right-side pin rows (pins exit to the RIGHT at x=650)
+       5 pins: GPIO32, GPIO27, GPIO26, GPIO25, GND/VCC for encoder rails
+  -->
+
+  <!-- PIN: VIN (label only) -->
+  <circle cx="650" cy="175" r="5" fill="#888888"/>
+  <text x="598" y="179" font-size="10" fill="#AAAAAA" text-anchor="end">VIN (5V, unused)</text>
+
+  <!-- PIN: GND (right) -->
+  <circle cx="650" cy="235" r="5" fill="#1A1A1A"/>
+  <text x="642" y="239" font-size="10" fill="white" text-anchor="end">GND</text>
+
+  <!-- PIN: GPIO32 (DC) -->
+  <circle cx="650" cy="295" r="5" fill="#F57F17"/>
+  <text x="642" y="299" font-size="10" fill="white" text-anchor="end">GPIO32 (DC)*</text>
+
+  <!-- PIN: GPIO27 (SW) -->
+  <circle cx="650" cy="355" r="5" fill="#43A047"/>
+  <text x="642" y="359" font-size="10" fill="white" text-anchor="end">GPIO27 (SW)</text>
+
+  <!-- PIN: GPIO26 (DT) -->
+  <circle cx="650" cy="415" r="5" fill="#388E3C"/>
+  <text x="642" y="419" font-size="10" fill="white" text-anchor="end">GPIO26 (DT)</text>
+
+  <!-- PIN: GPIO25 (CLK) -->
+  <circle cx="650" cy="475" r="5" fill="#2E7D32"/>
+  <text x="642" y="479" font-size="10" fill="white" text-anchor="end">GPIO25 (CLK)</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       DFPlayer Mini (top-left area)
+       Box: x=155, y=100, width=175, height=195
+       Left pins (exit left at x=155), Right pins (exit right at x=330)
+       ══════════════════════════════════════════════════════════ -->
+
+  <rect x="155" y="100" width="175" height="195" rx="6" fill="#5D4037" stroke="#3E2723" stroke-width="2"/>
+  <text x="242" y="122" text-anchor="middle" font-size="13" font-weight="bold" fill="white">DFPlayer Mini</text>
+  <line x1="155" y1="130" x2="330" y2="130" stroke="#3E2723" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- DFPlayer Left pins (→ power rails) -->
+  <!-- VCC -->
+  <circle cx="155" cy="155" r="5" fill="#CC0000"/>
+  <text x="163" y="159" font-size="10" fill="white">VCC</text>
+
+  <!-- GND -->
+  <circle cx="155" cy="200" r="5" fill="#1A1A1A"/>
+  <text x="163" y="204" font-size="10" fill="white">GND</text>
+
+  <!-- DFPlayer Right pins (→ ESP32 / Speaker) -->
+  <!-- TX -->
+  <circle cx="330" cy="155" r="5" fill="#1565C0"/>
+  <text x="322" y="159" font-size="10" fill="white" text-anchor="end">TX</text>
+
+  <!-- RX -->
+  <circle cx="330" cy="200" r="5" fill="#0D47A1"/>
+  <text x="322" y="204" font-size="10" fill="white" text-anchor="end">RX</text>
+
+  <!-- SPK1 -->
+  <circle cx="330" cy="245" r="5" fill="#6A1B9A"/>
+  <text x="322" y="249" font-size="10" fill="white" text-anchor="end">SPK1</text>
+
+  <!-- SPK2 -->
+  <circle cx="330" cy="270" r="5" fill="#7B1FA2"/>
+  <text x="322" y="274" font-size="10" fill="white" text-anchor="end">SPK2</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       OLED SSD1306 SPI (bottom-left area)
+       Box: x=155, y=330, width=175, height=240
+       Left pins (exit left at x=155), Right pins (exit right at x=330)
+       ══════════════════════════════════════════════════════════ -->
+
+  <rect x="155" y="330" width="175" height="240" rx="6" fill="#0D47A1" stroke="#01579B" stroke-width="2"/>
+  <text x="242" y="352" text-anchor="middle" font-size="13" font-weight="bold" fill="white">OLED SSD1306</text>
+  <text x="242" y="366" text-anchor="middle" font-size="10" fill="#90CAF9">SPI · 128×64</text>
+  <line x1="155" y1="374" x2="330" y2="374" stroke="#01579B" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- OLED Left pins (→ power rails) -->
+  <!-- GND -->
+  <circle cx="155" cy="400" r="5" fill="#1A1A1A"/>
+  <text x="163" y="404" font-size="10" fill="white">GND</text>
+
+  <!-- VCC -->
+  <circle cx="155" cy="440" r="5" fill="#CC0000"/>
+  <text x="163" y="444" font-size="10" fill="white">VCC</text>
+
+  <!-- OLED Right pins (→ ESP32) -->
+  <!-- D0/SCK -->
+  <circle cx="330" cy="400" r="5" fill="#E65100"/>
+  <text x="322" y="404" font-size="10" fill="white" text-anchor="end">D0/SCK</text>
+
+  <!-- D1/MOSI -->
+  <circle cx="330" cy="430" r="5" fill="#BF360C"/>
+  <text x="322" y="434" font-size="10" fill="white" text-anchor="end">D1/MOSI</text>
+
+  <!-- RES -->
+  <circle cx="330" cy="460" r="5" fill="#FF6F00"/>
+  <text x="322" y="464" font-size="10" fill="white" text-anchor="end">RES</text>
+
+  <!-- DC -->
+  <circle cx="330" cy="490" r="5" fill="#F57F17"/>
+  <text x="322" y="494" font-size="10" fill="white" text-anchor="end">DC*</text>
+
+  <!-- CS -->
+  <circle cx="330" cy="520" r="5" fill="#FF8F00"/>
+  <text x="322" y="524" font-size="10" fill="white" text-anchor="end">CS</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       KY-040 Rotary Encoder (right of ESP32)
+       Box: x=720, y=320, width=165, height=220
+       Left pins (exit left at x=720), connecting to ESP32 right pins
+       ══════════════════════════════════════════════════════════ -->
+
+  <rect x="720" y="320" width="165" height="220" rx="6" fill="#2E7D32" stroke="#1B5E20" stroke-width="2"/>
+  <text x="802" y="343" text-anchor="middle" font-size="13" font-weight="bold" fill="white">KY-040</text>
+  <text x="802" y="358" text-anchor="middle" font-size="10" fill="#A5D6A7">Rotary Encoder</text>
+  <line x1="720" y1="366" x2="885" y2="366" stroke="#1B5E20" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- Encoder Left pins (→ ESP32) -->
+  <!-- GND -->
+  <circle cx="720" cy="390" r="5" fill="#1A1A1A"/>
+  <text x="728" y="394" font-size="10" fill="white">GND</text>
+
+  <!-- VCC -->
+  <circle cx="720" cy="424" r="5" fill="#CC0000"/>
+  <text x="728" y="428" font-size="10" fill="white">VCC</text>
+
+  <!-- CLK -->
+  <circle cx="720" cy="458" r="5" fill="#2E7D32"/>
+  <text x="728" y="462" font-size="10" fill="white">CLK</text>
+
+  <!-- DT -->
+  <circle cx="720" cy="492" r="5" fill="#388E3C"/>
+  <text x="728" y="496" font-size="10" fill="white">DT</text>
+
+  <!-- SW -->
+  <circle cx="720" cy="526" r="5" fill="#43A047"/>
+  <text x="728" y="530" font-size="10" fill="white">SW</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       Speaker (top-right)
+       Box: x=720, y=100, width=165, height=140
+       Left pins connect back to DFPlayer via long wires
+       ══════════════════════════════════════════════════════════ -->
+
+  <rect x="720" y="100" width="165" height="140" rx="6" fill="#546E7A" stroke="#37474F" stroke-width="2"/>
+  <text x="802" y="128" text-anchor="middle" font-size="13" font-weight="bold" fill="white">Speaker</text>
+  <text x="802" y="143" text-anchor="middle" font-size="10" fill="#CFD8DC">4–8 Ω</text>
+  <line x1="720" y1="150" x2="885" y2="150" stroke="#37474F" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- Speaker Left pins -->
+  <!-- (+) SPK1 -->
+  <circle cx="720" cy="180" r="5" fill="#6A1B9A"/>
+  <text x="728" y="184" font-size="10" fill="white">(+) SPK1</text>
+
+  <!-- (−) SPK2 -->
+  <circle cx="720" cy="215" r="5" fill="#7B1FA2"/>
+  <text x="728" y="219" font-size="10" fill="white">(−) SPK2</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       WIRES
+       ══════════════════════════════════════════════════════════ -->
+
+  <!-- ── POWER RAILS to DFPlayer ── -->
+  <!-- DFPlayer VCC → VCC rail (red) -->
+  <line x1="52" y1="155" x2="155" y2="155" stroke="#CC0000" stroke-width="2.5"/>
+  <!-- DFPlayer GND → GND rail (black) -->
+  <line x1="80" y1="200" x2="155" y2="200" stroke="#1A1A1A" stroke-width="2.5"/>
+
+  <!-- ── POWER RAILS to OLED ── -->
+  <!-- OLED GND → GND rail -->
+  <line x1="80" y1="400" x2="155" y2="400" stroke="#1A1A1A" stroke-width="2.5"/>
+  <!-- OLED VCC → VCC rail -->
+  <line x1="52" y1="440" x2="155" y2="440" stroke="#CC0000" stroke-width="2.5"/>
+
+  <!-- ── POWER RAILS to ESP32 (left side) ── -->
+  <!-- ESP32 3V3 → VCC rail (horizontal run left from pin) -->
+  <polyline points="430,175 110,175 110,155 52,155" stroke="#CC0000" stroke-width="2.5" fill="none"/>
+  <!-- small connection dot at rail intersection -->
+  <circle cx="52" cy="155" r="4" fill="#CC0000"/>
+
+  <!-- ESP32 GND (left) → GND rail -->
+  <polyline points="430,235 115,235 115,200 80,200" stroke="#1A1A1A" stroke-width="2.5" fill="none"/>
+  <circle cx="80" cy="200" r="4" fill="#1A1A1A"/>
+
+  <!-- ── POWER from right rails for Encoder (route under esp32 bottom) ── -->
+  <!-- Encoder GND: right side GND, route down to bottom rail, then left to GND rail  -->
+  <!-- Route: from encoder GND pin (720,390) → left horizontal, past ESP32, down to y=665, then left to GND rail x=80 -->
+  <polyline points="720,390 695,390 695,665 80,665 80,660" stroke="#1A1A1A" stroke-width="2.5" fill="none"/>
+  <circle cx="80" cy="660" r="4" fill="#1A1A1A"/>
+
+  <!-- Encoder VCC: route from encoder pin (720,424) → left short, then down to y=645, left to VCC rail x=52 -->
+  <polyline points="720,424 698,424 698,645 52,645 52,660" stroke="#CC0000" stroke-width="2.5" fill="none"/>
+  <circle cx="52" cy="660" r="4" fill="#CC0000"/>
+
+  <!-- ── UART: DFPlayer TX → ESP32 GPIO16 (RX2) — BLUE ── -->
+  <line x1="330" y1="155" x2="430" y2="355" stroke="#1565C0" stroke-width="2.5"/>
+  <!-- Intermediate waypoints for clarity: go right from DFPlayer, then down to ESP32 pin level -->
+  <!-- Actually use a polyline for clean routing -->
+  <polyline points="330,155 385,155 385,355 430,355" stroke="#1565C0" stroke-width="2.5" fill="none"/>
+
+  <!-- ── UART: ESP32 GPIO17 (TX2) → 1kΩ Resistor → DFPlayer RX — DARK BLUE ── -->
+  <!-- Wire from ESP32 GPIO17 (430,415) → resistor start (375,415) -->
+  <line x1="430" y1="415" x2="393" y2="415" stroke="#0D47A1" stroke-width="2.5"/>
+  <!-- 1kΩ Resistor inline box -->
+  <rect x="348" y="407" width="44" height="16" rx="3" fill="#D4AF37" stroke="#8B6914" stroke-width="1.5"/>
+  <text x="370" y="419" text-anchor="middle" font-size="9" font-weight="bold" fill="#1A1A1A">1kΩ</text>
+  <!-- Wire from resistor → DFPlayer RX (330,200), with polyline routing -->
+  <polyline points="348,415 330,415 330,200" stroke="#0D47A1" stroke-width="2.5" fill="none"/>
+
+  <!-- ── Speaker wires: DFPlayer SPK1 → Speaker (+) ── -->
+  <!-- DFPlayer SPK1 at (330,245), Speaker(+) at (720,180) -->
+  <!-- Route: right from DFPlayer, up, then right to speaker -->
+  <polyline points="330,245 705,245 705,180 720,180" stroke="#6A1B9A" stroke-width="2.5" fill="none"/>
+
+  <!-- DFPlayer SPK2 → Speaker (−) -->
+  <!-- DFPlayer SPK2 at (330,270), Speaker(-) at (720,215) -->
+  <polyline points="330,270 710,270 710,215 720,215" stroke="#7B1FA2" stroke-width="2.5" fill="none"/>
+
+  <!-- ── OLED SPI wires: OLED right pins → ESP32 left pins ── -->
+
+  <!-- OLED D0/SCK → ESP32 GPIO18 (SCK): (330,400) → (430,535) — orange -->
+  <polyline points="330,400 370,400 370,535 430,535" stroke="#E65100" stroke-width="2.5" fill="none"/>
+
+  <!-- OLED D1/MOSI → ESP32 GPIO23 (MOSI): (330,430) → (430,595) — dark orange -->
+  <polyline points="330,430 374,430 374,595 430,595" stroke="#BF360C" stroke-width="2.5" fill="none"/>
+
+  <!-- OLED RES → ESP32 GPIO15: (330,460) → (430,295) — amber -->
+  <polyline points="330,460 378,460 378,295 430,295" stroke="#FF6F00" stroke-width="2.5" fill="none"/>
+
+  <!-- OLED CS → ESP32 GPIO5: (330,520) → (430,475) — gold-orange -->
+  <polyline points="330,520 382,520 382,475 430,475" stroke="#FF8F00" stroke-width="2.5" fill="none"/>
+
+  <!-- OLED DC → ESP32 GPIO32 (RIGHT side, dashed long route):
+       OLED DC pin at (330,490)
+       ESP32 GPIO32 at (650,295)
+       Route: from OLED right (330,490) → right past OLED edge to x=397, down to y=690 (under ESP32),
+       right to x=680, up to ESP32 GPIO32 y=295, left to pin (650,295)
+  -->
+  <polyline points="330,490 397,490 397,690 680,690 680,295 650,295"
+            stroke="#F57F17" stroke-width="2" stroke-dasharray="8,4" fill="none"/>
+  <!-- Small asterisk note near the dashed line bottom -->
+  <text x="540" y="706" text-anchor="middle" font-size="10" fill="#F57F17" font-style="italic">* IO32 wire routes under ESP32 on perfboard (dashed)</text>
+
+  <!-- ── Encoder wires: Encoder left pins → ESP32 right pins ── -->
+
+  <!-- Encoder CLK → ESP32 GPIO25: (720,458) → (650,475) -->
+  <line x1="720" y1="458" x2="650" y2="475" stroke="#2E7D32" stroke-width="2.5"/>
+
+  <!-- Encoder DT → ESP32 GPIO26: (720,492) → (650,415) -->
+  <polyline points="720,492 688,492 688,415 650,415" stroke="#388E3C" stroke-width="2.5" fill="none"/>
+
+  <!-- Encoder SW → ESP32 GPIO27: (720,526) → (650,355) -->
+  <polyline points="720,526 684,526 684,355 650,355" stroke="#43A047" stroke-width="2.5" fill="none"/>
+
+  <!-- ESP32 GND (right) → GND rail (route right and down) -->
+  <polyline points="650,235 692,235 692,660 80,660" stroke="#1A1A1A" stroke-width="2" stroke-dasharray="5,3" fill="none"/>
+
+  <!-- ══════════════════════════════════════════════════════════
+       LEGEND / KEY (bottom right corner)
+       ══════════════════════════════════════════════════════════ -->
+
+  <rect x="898" y="380" width="192" height="320" rx="6" fill="#2A1A08" opacity="0.82" stroke="#8B6914" stroke-width="1"/>
+  <text x="994" y="400" text-anchor="middle" font-size="12" font-weight="bold" fill="white">Wire Legend</text>
+
+  <!-- VCC -->
+  <line x1="910" y1="418" x2="950" y2="418" stroke="#CC0000" stroke-width="3"/>
+  <text x="957" y="422" font-size="10" fill="white">3.3V / VCC</text>
+
+  <!-- GND -->
+  <line x1="910" y1="436" x2="950" y2="436" stroke="#1A1A1A" stroke-width="3"/>
+  <rect x="910" y="430" width="40" height="12" fill="none" stroke="#555" stroke-width="0.5"/>
+  <text x="957" y="440" font-size="10" fill="white">GND</text>
+
+  <!-- UART TX (DFP → ESP) -->
+  <line x1="910" y1="456" x2="950" y2="456" stroke="#1565C0" stroke-width="3"/>
+  <text x="957" y="460" font-size="10" fill="white">UART TX (DFP→ESP)</text>
+
+  <!-- UART RX (ESP → DFP) -->
+  <line x1="910" y1="474" x2="950" y2="474" stroke="#0D47A1" stroke-width="3"/>
+  <text x="957" y="478" font-size="10" fill="white">UART RX (ESP→DFP)</text>
+
+  <!-- SPK1 -->
+  <line x1="910" y1="492" x2="950" y2="492" stroke="#6A1B9A" stroke-width="3"/>
+  <text x="957" y="496" font-size="10" fill="white">SPK1</text>
+
+  <!-- SPK2 -->
+  <line x1="910" y1="510" x2="950" y2="510" stroke="#7B1FA2" stroke-width="3"/>
+  <text x="957" y="514" font-size="10" fill="white">SPK2</text>
+
+  <!-- SCK -->
+  <line x1="910" y1="528" x2="950" y2="528" stroke="#E65100" stroke-width="3"/>
+  <text x="957" y="532" font-size="10" fill="white">SPI SCK</text>
+
+  <!-- MOSI -->
+  <line x1="910" y1="546" x2="950" y2="546" stroke="#BF360C" stroke-width="3"/>
+  <text x="957" y="550" font-size="10" fill="white">SPI MOSI</text>
+
+  <!-- RES -->
+  <line x1="910" y1="564" x2="950" y2="564" stroke="#FF6F00" stroke-width="3"/>
+  <text x="957" y="568" font-size="10" fill="white">SPI RES</text>
+
+  <!-- DC (dashed) -->
+  <line x1="910" y1="582" x2="950" y2="582" stroke="#F57F17" stroke-width="3" stroke-dasharray="6,3"/>
+  <text x="957" y="586" font-size="10" fill="white">SPI DC (under ESP)*</text>
+
+  <!-- CS -->
+  <line x1="910" y1="600" x2="950" y2="600" stroke="#FF8F00" stroke-width="3"/>
+  <text x="957" y="604" font-size="10" fill="white">SPI CS</text>
+
+  <!-- CLK -->
+  <line x1="910" y1="618" x2="950" y2="618" stroke="#2E7D32" stroke-width="3"/>
+  <text x="957" y="622" font-size="10" fill="white">Encoder CLK</text>
+
+  <!-- DT -->
+  <line x1="910" y1="636" x2="950" y2="636" stroke="#388E3C" stroke-width="3"/>
+  <text x="957" y="640" font-size="10" fill="white">Encoder DT</text>
+
+  <!-- SW -->
+  <line x1="910" y1="654" x2="950" y2="654" stroke="#43A047" stroke-width="3"/>
+  <text x="957" y="658" font-size="10" fill="white">Encoder SW</text>
+
+  <!-- Resistor symbol in legend -->
+  <rect x="910" y="667" width="40" height="14" rx="3" fill="#D4AF37" stroke="#8B6914" stroke-width="1"/>
+  <text x="930" y="678" text-anchor="middle" font-size="8" font-weight="bold" fill="#1A1A1A">1kΩ</text>
+  <text x="957" y="678" font-size="10" fill="white">Series resistor</text>
+
+  <!-- ══════════════════════════════════════════════════════════
+       Extra annotation labels
+       ══════════════════════════════════════════════════════════ -->
+
+  <!-- Label for 1kΩ resistor on wire (near the inline resistor rect) -->
+  <text x="370" y="400" text-anchor="middle" font-size="9" fill="#8B6914" font-style="italic">↓ 1kΩ ↓</text>
+
+  <!-- Annotation arrows for DFPlayer / OLED routing areas -->
+  <text x="356" y="320" text-anchor="middle" font-size="9" fill="#AAAAAA" font-style="italic">SPI routes</text>
+  <text x="356" y="332" text-anchor="middle" font-size="9" fill="#AAAAAA" font-style="italic">via x=370–382</text>
+
+  <!-- Annotation for encoder GND/VCC bottom routing -->
+  <text x="400" y="682" text-anchor="middle" font-size="9" fill="#AAAAAA" font-style="italic">Encoder GND/VCC route below board</text>
+
+  <!-- Version / note -->
+  <text x="550" y="720" text-anchor="middle" font-size="10" fill="#5A3A10">Generated from Config.h &amp; CLAUDE.md · Target: Mercedes CLA180 · Board: ELEGOO ESP-WROOM-32</text>
+
+</svg>
