@@ -106,11 +106,11 @@
   <text x="642" y="299" font-size="10" fill="white" text-anchor="end">GPIO32 (DC)*</text>
 
   <!-- PIN: GPIO27 (SW) -->
-  <circle cx="650" cy="355" r="5" fill="#43A047"/>
+  <circle cx="650" cy="355" r="5" fill="#00838F"/>
   <text x="642" y="359" font-size="10" fill="white" text-anchor="end">GPIO27 (SW)</text>
 
   <!-- PIN: GPIO26 (DT) -->
-  <circle cx="650" cy="415" r="5" fill="#388E3C"/>
+  <circle cx="650" cy="415" r="5" fill="#F9A825"/>
   <text x="642" y="419" font-size="10" fill="white" text-anchor="end">GPIO26 (DT)</text>
 
   <!-- PIN: GPIO25 (CLK) -->
@@ -222,11 +222,11 @@
   <text x="728" y="462" font-size="10" fill="white">CLK</text>
 
   <!-- DT -->
-  <circle cx="720" cy="492" r="5" fill="#388E3C"/>
+  <circle cx="720" cy="492" r="5" fill="#F9A825"/>
   <text x="728" y="496" font-size="10" fill="white">DT</text>
 
   <!-- SW -->
-  <circle cx="720" cy="526" r="5" fill="#43A047"/>
+  <circle cx="720" cy="526" r="5" fill="#00838F"/>
   <text x="728" y="530" font-size="10" fill="white">SW</text>
 
 
@@ -342,10 +342,10 @@
   <line x1="720" y1="458" x2="650" y2="475" stroke="#2E7D32" stroke-width="2.5"/>
 
   <!-- Encoder DT → ESP32 GPIO26: (720,492) → (650,415) -->
-  <polyline points="720,492 688,492 688,415 650,415" stroke="#388E3C" stroke-width="2.5" fill="none"/>
+  <polyline points="720,492 688,492 688,415 650,415" stroke="#F9A825" stroke-width="2.5" fill="none"/>
 
   <!-- Encoder SW → ESP32 GPIO27: (720,526) → (650,355) -->
-  <polyline points="720,526 684,526 684,355 650,355" stroke="#43A047" stroke-width="2.5" fill="none"/>
+  <polyline points="720,526 684,526 684,355 650,355" stroke="#00838F" stroke-width="2.5" fill="none"/>
 
   <!-- ESP32 GND (right) → GND rail (route right and down) -->
   <polyline points="650,235 692,235 692,660 80,660" stroke="#1A1A1A" stroke-width="2" stroke-dasharray="5,3" fill="none"/>
@@ -407,11 +407,11 @@
   <text x="957" y="622" font-size="10" fill="white">Encoder CLK</text>
 
   <!-- DT -->
-  <line x1="910" y1="636" x2="950" y2="636" stroke="#388E3C" stroke-width="3"/>
+  <line x1="910" y1="636" x2="950" y2="636" stroke="#F9A825" stroke-width="3"/>
   <text x="957" y="640" font-size="10" fill="white">Encoder DT</text>
 
   <!-- SW -->
-  <line x1="910" y1="654" x2="950" y2="654" stroke="#43A047" stroke-width="3"/>
+  <line x1="910" y1="654" x2="950" y2="654" stroke="#00838F" stroke-width="3"/>
   <text x="957" y="658" font-size="10" fill="white">Encoder SW</text>
 
   <!-- Resistor symbol in legend -->
