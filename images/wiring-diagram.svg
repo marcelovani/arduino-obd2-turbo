@@ -86,7 +86,7 @@
   <text x="438" y="539" font-size="10" fill="white">GPIO18 (SCK)</text>
 
   <!-- PIN: GPIO23 (MOSI) -->
-  <circle cx="430" cy="595" r="5" fill="#BF360C"/>
+  <circle cx="430" cy="595" r="5" fill="#FFD600"/>
   <text x="438" y="599" font-size="10" fill="white">GPIO23 (MOSI)</text>
 
   <!-- Right-side pin rows (pins exit to the RIGHT at x=650)
@@ -181,7 +181,7 @@
   <text x="322" y="404" font-size="10" fill="white" text-anchor="end">D0/SCK</text>
 
   <!-- D1/MOSI -->
-  <circle cx="330" cy="430" r="5" fill="#BF360C"/>
+  <circle cx="330" cy="430" r="5" fill="#FFD600"/>
   <text x="322" y="434" font-size="10" fill="white" text-anchor="end">D1/MOSI</text>
 
   <!-- RES -->
@@ -317,7 +317,7 @@
   <polyline points="330,400 370,400 370,535 430,535" stroke="#E65100" stroke-width="2.5" fill="none"/>
 
   <!-- OLED D1/MOSI → ESP32 GPIO23 (MOSI): (330,430) → (430,595) — dark orange -->
-  <polyline points="330,430 374,430 374,595 430,595" stroke="#BF360C" stroke-width="2.5" fill="none"/>
+  <polyline points="330,430 374,430 374,595 430,595" stroke="#FFD600" stroke-width="2.5" fill="none"/>
 
   <!-- OLED RES → ESP32 GPIO15: (330,460) → (430,295) — amber -->
   <polyline points="330,460 378,460 378,295 430,295" stroke="#FF6F00" stroke-width="2.5" fill="none"/>
@@ -387,7 +387,7 @@
   <text x="957" y="532" font-size="10" fill="white">SPI SCK</text>
 
   <!-- MOSI -->
-  <line x1="910" y1="546" x2="950" y2="546" stroke="#BF360C" stroke-width="3"/>
+  <line x1="910" y1="546" x2="950" y2="546" stroke="#FFD600" stroke-width="3"/>
   <text x="957" y="550" font-size="10" fill="white">SPI MOSI</text>
 
   <!-- RES -->
